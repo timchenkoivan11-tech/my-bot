@@ -5,6 +5,8 @@ import os
 from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
+from flask import Flask
+from threading import Thread
 
 # ================= НАСТРОЙКИ =================
 BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
@@ -14,6 +16,18 @@ DATA_FILE = "bot_data.json"
 # =============================================
 
 logging.basicConfig(level=logging.INFO)
+
+# --- Код мини-сайта для Render ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+# --------------------------------
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -55,10 +69,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = (
             f"🎉 Поздравляю, {winner_name}!\n\n"
-            f"🧸 Ты выиграл **плюшевого мишку**!\n"
+            f"🧸 Ты выиграл **мишку**!\n"
             f"✅ Подарок отправится в течение 2 часов 🕒\n\n"
             f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки.\n\n"
-            f"Общайтесь в моем чате @твой_ник_чат"
+            
         )
 
         await update.message.reply_text(
@@ -73,11 +87,15 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
-    app.add_handler(CommandHandler("stats", stats))
+    # Запускаем мини-сайт в фоне
+    Thread(target=run_flask).start()
+    
+    # Запускаем бота
+    app_bot = Application.builder().token(BOT_TOKEN).build()
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
+    app_bot.add_handler(CommandHandler("stats", stats))
     print("Бот запущен...")
-    app.run_polling()
+    app_bot.run_polling()
 
 if __name__ == "__main__":
     main()
