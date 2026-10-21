@@ -111,7 +111,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки."
         )
 
-        await update.message.reply_text(text=text, parse_mode="Markdown")
+        bear_photo = "https://i.postimg.cc/qhh1Hndf/IMG_7671.jpg" 
+        
+        await update.message.reply_photo(
+            photo=bear_photo, 
+            caption=text, 
+            parse_mode="Markdown"
+        )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_chance = data.get("win_chance", DEFAULT_WIN_CHANCE)
