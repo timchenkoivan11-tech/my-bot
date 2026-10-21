@@ -10,7 +10,7 @@ from threading import Thread
 
 # ================= НАСТРОЙКИ =================
 BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
-WIN_CHANCE_PERCENT = 100
+WIN_CHANCE_PERCENT = 99
 COOLDOWN_MINUTES = 60
 DATA_FILE = "bot_data.json"
 # =============================================
