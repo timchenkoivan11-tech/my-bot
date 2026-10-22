@@ -10,7 +10,7 @@ from flask import Flask
 from threading import Thread
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = "СЮДА_ВСТАВЬ_СВОЙ_ТОКЕН"
+BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
 ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
 DEFAULT_WIN_CHANCE = 0.1
@@ -18,7 +18,7 @@ COOLDOWN_MINUTES = 60
 DATA_FILE = "bot_data.json"
 
 DEFAULT_TIMER = 60
-DEFAULT_PRIZE = "Плюшевый мишка 🧸"
+DEFAULT_PRIZE = "мишка 🧸"
 # =============================================
 
 logging.basicConfig(level=logging.INFO)
