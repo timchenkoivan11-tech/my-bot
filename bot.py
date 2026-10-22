@@ -14,7 +14,7 @@ BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
 ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
 DEFAULT_WIN_CHANCE = 0.1
-DEFAULT_COOLDOWN = 60  # Кулдаун по умолчанию (в минутах)
+DEFAULT_COOLDOWN = 60  
 DATA_FILE = "bot_data.json"
 
 DEFAULT_TIMER = 60
@@ -121,9 +121,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
     
+    # 🛑 1. МГНОВЕННАЯ ЗАЩИТА ДЛЯ ТЕБЯ (Владельца)
+    if user.id == ADMIN_ID:
+        return
+
+    # 🛑 2. ЗАЩИТА ДЛЯ ОСТАЛЬНЫХ АДМИНОВ ЧАТА
     try:
         member = await context.bot.get_chat_member(update.message.chat_id, user.id)
-        if member.status in [ChatMember.ADMINISTRATOR, ChatMember.CREATOR] or user.id == ADMIN_ID:
+        if member.status in ['administrator', 'creator', ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
             return  
     except Exception:
         pass
@@ -132,15 +137,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ИВЕНТЫ
     if active_event == 'king':
+        seconds = data.get("timer", DEFAULT_TIMER)
+        
         if current_timer_task and not current_timer_task.done():
             current_timer_task.cancel()
             if current_king_id != user.id:
-                await update.message.reply_text(f"⚔️ {user_name} перебивает {current_king_name} и забирает корону!")
+                await update.message.reply_text(f"⚔️ {user_name} перебивает {current_king_name}! Он забирает корону. Новый таймер на {seconds} секунд пошел!")
+        else:
+            await update.message.reply_text(f"👑 {user_name} первый! Он держит корону. Пошел таймер на {seconds} секунд! Успейте перебить!")
         
         current_king_id = user.id
         current_king_name = user_name
-
-        seconds = data.get("timer", DEFAULT_TIMER)
         current_timer_task = asyncio.create_task(run_timer(update.message.chat_id, user.id, user_name, seconds, current_prize, context))
         return 
 
@@ -159,7 +166,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 secret_number = None
         return 
 
-    # МИШКА (С динамическим кулдауном)
+    # МИШКА
     chat_id_str = str(update.message.chat_id)
     user_id_str = str(user.id)
     key = f"{chat_id_str}_{user_id_str}"
@@ -183,12 +190,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text_win = (
             f"🎉 Поздравляю, {user_name}!\n\n"
-            f"🧸 Ты выиграл **плюшевого мишку**!\n"
+            f"🧸 Ты выиграл **мишку**!\n"
             f"✅ Подарок отправится в течение 2 часов 🕒\n\n"
             f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки."
         )
         bear_photo = "https://i.postimg.cc/qhh1Hndf/IMG_7671.jpg" 
-        
         await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="Markdown")
 
 # --- АДМИН-ПАНЕЛЬ ---
@@ -274,9 +280,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# --- ОБРАБОТКА ТЕКСТА ОТ АДМИНА (пошаговая настройка) ---
+# --- ОБРАБОТКА ТЕКСТА ОТ АДМИНА ---
 async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global active_event, secret_number, current_prize
+    global active_event, secret_number, current_prize, current_king_id, current_king_name
     
     if update.message.from_user.id != ADMIN_ID or update.message.chat.type != 'private': return
     
@@ -309,6 +315,8 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if step == 'king_prize':
         current_prize = text
         active_event = 'king'
+        current_king_id = None 
+        current_king_name = None
         context.user_data['setup_step'] = None
         seconds = data.get("timer", DEFAULT_TIMER)
         
@@ -398,7 +406,6 @@ def main():
     app_bot.add_handler(CommandHandler("price", announce_price))
     
     app_bot.add_handler(CallbackQueryHandler(button_handler))
-    
     app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_text_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE, on_message))
     
