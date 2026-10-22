@@ -14,11 +14,10 @@ BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
 ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
 DEFAULT_WIN_CHANCE = 0.1
-COOLDOWN_MINUTES = 60
+DEFAULT_COOLDOWN = 60  # Кулдаун по умолчанию (в минутах)
 DATA_FILE = "bot_data.json"
 
 DEFAULT_TIMER = 60
-DEFAULT_PRIZE = "мишка 🧸"
 # =============================================
 
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +39,8 @@ current_timer_task = None
 current_king_id = None
 current_king_name = None
 secret_number = None
+current_prize = None 
+guess_range = None
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -47,9 +48,9 @@ def load_data():
             data = json.load(f)
             if "win_chance" not in data: data["win_chance"] = DEFAULT_WIN_CHANCE
             if "timer" not in data: data["timer"] = DEFAULT_TIMER
-            if "prize" not in data: data["prize"] = DEFAULT_PRIZE
+            if "cooldown" not in data: data["cooldown"] = DEFAULT_COOLDOWN
             return data
-    return {"cooldowns": {}, "win_chance": DEFAULT_WIN_CHANCE, "timer": DEFAULT_TIMER, "prize": DEFAULT_PRIZE}
+    return {"cooldowns": {}, "win_chance": DEFAULT_WIN_CHANCE, "timer": DEFAULT_TIMER, "cooldown": DEFAULT_COOLDOWN}
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -57,14 +58,23 @@ def save_data(data):
 
 data = load_data()
 
-# --- Клавиатура для меню ---
+# --- Клавиатуры ---
 def get_main_menu_keyboard():
     keyboard = [
-        [InlineKeyboardButton("👑 Царь горы", callback_data='start_king'), InlineKeyboardButton("🎯 Угадай число", callback_data='start_guess')],
+        [InlineKeyboardButton("👑 Запустить Царь горы", callback_data='setup_king')],
+        [InlineKeyboardButton("🎯 Запустить Угадай число", callback_data='setup_guess')],
         [InlineKeyboardButton("⏱ 30 сек", callback_data='time_30'), InlineKeyboardButton("⏱ 1 мин", callback_data='time_60')],
         [InlineKeyboardButton("⏱ 3 мин", callback_data='time_180'), InlineKeyboardButton("⏱ 5 мин", callback_data='time_300')],
-        [InlineKeyboardButton("🎲 Изменить шанс мишки", callback_data='change_chance')],
+        [InlineKeyboardButton("🎲 Шанс мишки", callback_data='change_chance')],
+        [InlineKeyboardButton("⏱ Кулдаун мишки", callback_data='change_cooldown')],
         [InlineKeyboardButton("📖 Все команды", callback_data='show_commands')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_range_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("1 - 100", callback_data='range_100')],
+        [InlineKeyboardButton("1 - 1000", callback_data='range_1000')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -103,7 +113,7 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
 
 # --- Обработка сообщений в чате ---
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global current_timer_task, current_king_id, current_king_name, active_event, secret_number
+    global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
 
     if not update.message or not update.message.text: return
     if update.message.chat_id != ALLOWED_CHAT_ID: return
@@ -111,7 +121,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
     
-    # Проверка на админа (админы не сбивают таймер и не выигрывают мишку)
     try:
         member = await context.bot.get_chat_member(update.message.chat_id, user.id)
         if member.status in [ChatMember.ADMINISTRATOR, ChatMember.CREATOR] or user.id == ADMIN_ID:
@@ -121,7 +130,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_name = f"@{user.username}" if user.username else user.first_name
 
-    # БЛОК 1: ЛОГИКА ИВЕНТОВ
+    # ИВЕНТЫ
     if active_event == 'king':
         if current_timer_task and not current_timer_task.done():
             current_timer_task.cancel()
@@ -132,19 +141,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_king_name = user_name
 
         seconds = data.get("timer", DEFAULT_TIMER)
-        prize = data.get("prize", DEFAULT_PRIZE)
-        current_timer_task = asyncio.create_task(run_timer(update.message.chat_id, user.id, user_name, seconds, prize, context))
+        current_timer_task = asyncio.create_task(run_timer(update.message.chat_id, user.id, user_name, seconds, current_prize, context))
         return 
 
     elif active_event == 'guess':
         if text.isdigit():
             guess = int(text)
             if guess == secret_number:
-                prize = data.get("prize", DEFAULT_PRIZE)
                 win_text = (
                     f"🎯 **БИНГО!**\n\n"
                     f"🏆 {user_name} угадал загаданное число (**{secret_number}**)!\n"
-                    f"🎁 Победитель забирает приз: **{prize}**!\n\n"
+                    f"🎁 Победитель забирает приз: **{current_prize}**!\n\n"
                     f"Поздравляем! 🎉"
                 )
                 await context.bot.send_message(update.message.chat_id, win_text, parse_mode="Markdown")
@@ -152,7 +159,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 secret_number = None
         return 
 
-    # БЛОК 2: ЛОГИКА МИШКИ
+    # МИШКА (С динамическим кулдауном)
     chat_id_str = str(update.message.chat_id)
     user_id_str = str(user.id)
     key = f"{chat_id_str}_{user_id_str}"
@@ -160,12 +167,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now()
     cooldowns = data.get("cooldowns", {})
     current_chance = data.get("win_chance", DEFAULT_WIN_CHANCE)
+    current_cooldown = data.get("cooldown", DEFAULT_COOLDOWN)
 
-    if COOLDOWN_MINUTES > 0:
+    if current_cooldown > 0:
         last_win = cooldowns.get(key)
         if last_win:
             last_time = datetime.fromisoformat(last_win)
-            if now - last_time < timedelta(minutes=COOLDOWN_MINUTES):
+            if now - last_time < timedelta(minutes=current_cooldown):
                 return
 
     if random.random() * 100 < current_chance:
@@ -181,78 +189,178 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         bear_photo = "https://i.postimg.cc/qhh1Hndf/IMG_7671.jpg" 
         
-        await update.message.reply_photo(
-            photo=bear_photo, 
-            caption=text_win, 
-            parse_mode="Markdown"
-        )
+        await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="Markdown")
 
-# --- ТЕКСТОВЫЕ КОМАНДЫ ДЛЯ АДМИНА ---
+# --- АДМИН-ПАНЕЛЬ ---
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID: return
+    context.user_data['setup_step'] = None 
     await update.message.reply_text(
         f"👑 **Админ-панель**\n\n"
         f"Время ивента: **{data.get('timer')} сек.**\n"
-        f"Приз: **{data.get('prize')}**\n"
-        f"Шанс мишки: **{data.get('win_chance')}%**\n\n"
-        f"Используй кнопки ниже или команды:\n"
-        f"`/startguess 500` — Угадай число (твое число)\n"
-        f"`/startking` — Царь горы\n"
-        f"`/stop` — Остановить ивент",
+        f"Шанс мишки: **{data.get('win_chance')}%**\n"
+        f"Кулдаун мишки: **{data.get('cooldown')} мин.**\n\n"
+        f"Выбери действие:",
         reply_markup=get_main_menu_keyboard(),
         parse_mode="Markdown"
     )
 
+# --- Обработка нажатий на кнопки ---
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global active_event
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID: return
+
+    if query.data.startswith('time_'):
+        new_time = int(query.data.split('_')[1])
+        data["timer"] = new_time
+        save_data(data)
+        await query.edit_message_text(
+            text=f"✅ Таймер изменен на **{new_time} секунд**.",
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == 'setup_king':
+        if active_event:
+            await query.answer("⚠️ Другой ивент уже идет!", show_alert=True)
+            return
+        context.user_data['setup_step'] = 'king_prize'
+        await query.edit_message_text("🎁 **Шаг 1/1:** Напиши в этот чат приз для «Царя горы» (например: 100 рублей):")
+
+    elif query.data == 'setup_guess':
+        if active_event:
+            await query.answer("⚠️ Другой ивент уже идет!", show_alert=True)
+            return
+        context.user_data['setup_step'] = 'guess_range'
+        await query.edit_message_text("🎯 **Шаг 1/3:** Выбери диапазон чисел:", reply_markup=get_range_keyboard())
+
+    elif query.data in ['range_100', 'range_1000']:
+        context.user_data['guess_range'] = 100 if query.data == 'range_100' else 1000
+        context.user_data['setup_step'] = 'guess_number'
+        await query.edit_message_text(f"✅ Диапазон: 1-{context.user_data['guess_range']}.\n\n🔢 **Шаг 2/3:** Напиши секретное число (от 1 до {context.user_data['guess_range']}):")
+
+    elif query.data == 'end_event':
+        active_event = None
+        if current_timer_task and not current_timer_task.done(): current_timer_task.cancel()
+        await query.message.edit_text("🛑 **Ивент был принудительно завершен.**", parse_mode="Markdown")
+
+    elif query.data == 'change_chance':
+        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", parse_mode="Markdown")
+        context.user_data['setup_step'] = 'set_chance'
+    
+    elif query.data == 'change_cooldown':
+        await query.edit_message_text(text="⏱ **Изменение кулдауна**\n\nНапиши в этот чат число минут (например: `30`, `5`). Чтобы отключить кулдаун, напиши `0`.", parse_mode="Markdown")
+        context.user_data['setup_step'] = 'set_cooldown'
+
+    elif query.data == 'show_commands':
+        commands_text = (
+            "📚 **Все доступные команды:**\n\n"
+            "🔹 `/startguess` — Запустить «Угадай число»\n"
+            "🔹 `/startking` — Запустить «Царь горы»\n"
+            "🔹 `/stop` — Остановить любой ивент\n"
+            "🔹 `/price <звезды>` — Объявить цену за сообщения\n\n"
+            "💡 *Все настройки призов и чисел делаются в диалоге с ботом.*"
+        )
+        back_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data='back_to_menu')]])
+        await query.edit_message_text(text=commands_text, reply_markup=back_keyboard, parse_mode="Markdown")
+
+    elif query.data == 'back_to_menu':
+        await query.edit_message_text(
+            text=f"👑 **Админ-панель**\n\nВремя: **{data.get('timer')} сек.**\nШанс: **{data.get('win_chance')}%**\nКулдаун: **{data.get('cooldown')} мин.**",
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+
+# --- ОБРАБОТКА ТЕКСТА ОТ АДМИНА (пошаговая настройка) ---
+async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global active_event, secret_number, current_prize
+    
+    if update.message.from_user.id != ADMIN_ID or update.message.chat.type != 'private': return
+    
+    step = context.user_data.get('setup_step')
+    text = update.message.text.strip()
+
+    if step == 'set_chance':
+        try:
+            new_chance = float(text.replace(',', '.'))
+            data["win_chance"] = new_chance
+            save_data(data)
+            await update.message.reply_text(f"✅ Шанс мишки изменен на **{new_chance}%**.", parse_mode="Markdown")
+            context.user_data['setup_step'] = None
+        except ValueError:
+            await update.message.reply_text("❌ Это не число. Попробуй еще раз.")
+        return
+    
+    if step == 'set_cooldown':
+        try:
+            new_cd = int(text)
+            if new_cd < 0: raise ValueError
+            data["cooldown"] = new_cd
+            save_data(data)
+            await update.message.reply_text(f"✅ Кулдаун изменен на **{new_cd} мин.** (0 = отключен).", parse_mode="Markdown")
+            context.user_data['setup_step'] = None
+        except ValueError:
+            await update.message.reply_text("❌ Нужно ввести целое число минут (например 5 или 0).")
+        return
+
+    if step == 'king_prize':
+        current_prize = text
+        active_event = 'king'
+        context.user_data['setup_step'] = None
+        seconds = data.get("timer", DEFAULT_TIMER)
+        
+        event_text = f"📣 **Ивент «Царь горы» начался!**\n\n⏳ Цель: **{seconds} сек.**\n\n🎁 Приз: **{current_prize}**\n\n👉 *Напиши сообщение, чтобы запустить таймер!*"
+        end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
+        await update.message.reply_text("✅ Царь горы запущен в чате! (Мишка на паузе)")
+        return
+
+    elif step == 'guess_number':
+        if not text.isdigit():
+            await update.message.reply_text("❌ Нужно ввести цифру. Попробуй еще раз.")
+            return
+        
+        num = int(text)
+        max_range = context.user_data.get('guess_range', 1000)
+        if num < 1 or num > max_range:
+            await update.message.reply_text(f"❌ Число должно быть от 1 до {max_range}!")
+            return
+            
+        secret_number = num
+        context.user_data['setup_step'] = 'guess_prize'
+        await update.message.reply_text("✅ Число принято!\n\n🎁 **Шаг 3/3:** Напиши приз для победителя:")
+        return
+
+    elif step == 'guess_prize':
+        current_prize = text
+        active_event = 'guess'
+        context.user_data['setup_step'] = None
+        
+        event_text = f"🎯 **Ивент «Угадай число» начался!**\n\n🎁 Приз: **{current_prize}**\n\n👉 Пиши число от **1 до {context.user_data.get('guess_range', 1000)}** — кто угадает, тот получит приз!"
+        end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
+        await update.message.reply_text(f"✅ Игра запущена! Загаданное число: {secret_number} (сохрани в тайне).")
+        return
+
+# --- Текстовые команды ---
 async def cmd_start_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global active_event, secret_number
     if update.message.from_user.id != ADMIN_ID: return
     if active_event:
-        await update.message.reply_text("⚠️ Другой ивент уже идет! Сначала останови его (/stop).")
+        await update.message.reply_text("⚠️ Другой ивент уже идет! Останови его (/stop).")
         return
-    if not context.args:
-        await update.message.reply_text("❌ Ты забыл написать число!\nПиши так: `/startguess 500`")
-        return
-
-    try:
-        secret_number = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("❌ Это не число!")
-        return
-
-    active_event = 'guess'
-    prize = data.get("prize", DEFAULT_PRIZE)
-    
-    event_text = (
-        f"🎯 **Ивент «Угадай число» начался!**\n\n"
-        f"🎁 Приз: **{prize}**\n\n"
-        f"👉 Пиши в чат число — кто угадает, тот и получит приз!"
-    )
-    end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
-    
-    await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
-    await update.message.reply_text(f"✅ Игра началась! Ты загадал число: {secret_number}")
+    context.user_data['setup_step'] = 'guess_range'
+    await update.message.reply_text("🎯 **Шаг 1/3:** Выбери диапазон чисел:", reply_markup=get_range_keyboard())
 
 async def cmd_start_king(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global active_event
     if update.message.from_user.id != ADMIN_ID: return
     if active_event:
-        await update.message.reply_text("⚠️ Другой ивент уже идет! Сначала останови его (/stop).")
+        await update.message.reply_text("⚠️ Другой ивент уже идет! Останови его (/stop).")
         return
-
-    active_event = 'king'
-    seconds = data.get("timer", DEFAULT_TIMER)
-    prize = data.get("prize", DEFAULT_PRIZE)
-    
-    event_text = (
-        f"📣 **Ивент «Царь горы» начался!**\n\n"
-        f"⏳ Цель: **{seconds} сек.** без перебива\n\n"
-        f"🎁 Приз: **{prize}**\n\n"
-        f"👉 *Напиши любое сообщение в чат, чтобы запустить таймер!*"
-    )
-    end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
-    
-    await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
-    await update.message.reply_text("✅ Царь горы запущен!")
+    context.user_data['setup_step'] = 'king_prize'
+    await update.message.reply_text("🎁 **Шаг 1/1:** Напиши приз для «Царя горы» (например: 100 рублей):")
 
 async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, secret_number, current_timer_task
@@ -269,94 +377,6 @@ async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text="🛑 **Ивент был остановлен администратором.**", parse_mode="Markdown")
     await update.message.reply_text("✅ Ивент остановлен.")
 
-# --- Обработка нажатий на кнопки ---
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global active_event, secret_number, current_timer_task
-    query = update.callback_query
-    await query.answer()
-
-    if query.from_user.id != ADMIN_ID: return
-
-    if query.data.startswith('time_'):
-        new_time = int(query.data.split('_')[1])
-        data["timer"] = new_time
-        save_data(data)
-        await query.edit_message_text(
-            text=f"✅ Таймер изменен на **{new_time} секунд**.\nВыбери действие:",
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode="Markdown"
-        )
-    
-    elif query.data == 'start_king':
-        if active_event:
-            await query.answer("⚠️ Другой ивент уже идет!", show_alert=True)
-            return
-        active_event = 'king'
-        seconds = data.get("timer", DEFAULT_TIMER)
-        prize = data.get("prize", DEFAULT_PRIZE)
-        event_text = f"📣 **Ивент «Царь горы» начался!**\n\n⏳ Цель: **{seconds} сек.**\n\n🎁 Приз: **{prize}**\n\n👉 *Напиши сообщение, чтобы запустить таймер!*"
-        end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
-        await query.edit_message_text("✅ Царь горы запущен! (Мишка на паузе)", reply_markup=get_main_menu_keyboard())
-
-    elif query.data == 'start_guess':
-        await query.edit_message_text("🎯 Чтобы запустить игру с нужным числом, напиши в чат:\n`/startguess 500` (вместо 500 твое число)", parse_mode="Markdown")
-
-    elif query.data == 'end_event':
-        if query.from_user.id != ADMIN_ID: return
-        active_event = None
-        secret_number = None
-        if current_timer_task and not current_timer_task.done(): current_timer_task.cancel()
-        await query.message.edit_text("🛑 **Ивент был принудительно завершен.**", parse_mode="Markdown")
-
-    elif query.data == 'change_chance':
-        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", parse_mode="Markdown")
-
-    elif query.data == 'show_commands':
-        commands_text = (
-            "📚 **Команды (вводить в личке с ботом):**\n\n"
-            "🔹 `/startguess 500` — Запустить Угадай число\n"
-            "🔹 `/startking` — Запустить Царь горы\n"
-            "🔹 `/stop` — Остановить любой ивент\n"
-            "🔹 `/setprize <текст>` — Изменить приз\n"
-            "🔹 `/settime <сек>` — Задать таймер\n"
-            "🔹 `/price <звезды>` — Объявить цену"
-        )
-        back_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data='back_to_menu')]])
-        await query.edit_message_text(text=commands_text, reply_markup=back_keyboard, parse_mode="Markdown")
-
-    elif query.data == 'back_to_menu':
-        await query.edit_message_text(
-            text=f"👑 **Админ-панель**\n\nВремя: **{data.get('timer')} сек.**\nПриз: **{data.get('prize')}**\nШанс: **{data.get('win_chance')}%**",
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode="Markdown"
-        )
-
-# --- Прочие команды ---
-async def admin_change_chance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID or update.message.chat.type != 'private': return
-    text = update.message.text.replace(',', '.')
-    try:
-        new_chance = float(text)
-        if new_chance < 0 or new_chance > 100:
-            await update.message.reply_text("❌ Ошибка! Введи число от 0 до 100.")
-            return
-        data["win_chance"] = new_chance
-        save_data(data)
-        await update.message.reply_text(f"✅ Успешно! Новый шанс на мишку: **{new_chance}%**", parse_mode="Markdown")
-    except ValueError:
-        pass
-
-async def set_prize(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID: return
-    if not context.args:
-        await update.message.reply_text("❌ Пиши так: `/setprize Плюшевый мишка`")
-        return
-    new_prize = " ".join(context.args)
-    data["prize"] = new_prize
-    save_data(data)
-    await update.message.reply_text(f"✅ Приз изменен на: {new_prize}")
-
 async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID: return
     if not context.args:
@@ -367,13 +387,6 @@ async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="Markdown")
     await update.message.reply_text("✅ Объявление отправлено.")
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.chat_id != ALLOWED_CHAT_ID and update.message.chat.type != 'private': return
-    await update.message.reply_text(
-        f"🎲 Шанс на мишку: {data.get('win_chance', DEFAULT_WIN_CHANCE)}% с каждого сообщения.\n"
-        f"Кулдаун после победы: {COOLDOWN_MINUTES} мин."
-    )
-
 def main():
     Thread(target=run_flask).start()
     app_bot = Application.builder().token(BOT_TOKEN).build()
@@ -382,12 +395,11 @@ def main():
     app_bot.add_handler(CommandHandler("startguess", cmd_start_guess))
     app_bot.add_handler(CommandHandler("startking", cmd_start_king))
     app_bot.add_handler(CommandHandler("stop", cmd_stop))
-    app_bot.add_handler(CommandHandler("setprize", set_prize))
     app_bot.add_handler(CommandHandler("price", announce_price))
-    app_bot.add_handler(CommandHandler("stats", stats))
     
-    app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_change_chance))
     app_bot.add_handler(CallbackQueryHandler(button_handler))
+    
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_text_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE, on_message))
     
     print("Бот запущен...")
