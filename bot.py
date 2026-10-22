@@ -10,8 +10,8 @@ from flask import Flask
 from threading import Thread
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = "8789333228:AAHbpCWdZSlDcj-r5Z84-BnrhYeLcTS5DnA"
-ADMIN_ ID = 5522110735  
+BOT_TOKEN = os.environ.get("8789333228:AAHbpCWdZSlDcj-r5Z84-BnrhYeLcTS5DnA")
+ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
 DEFAULT_WIN_CHANCE = 0.4
 DEFAULT_COOLDOWN = 60  
@@ -206,7 +206,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text_win = (
             f"🎉 Поздравляю, {user_name}!\n\n"
-            f"🧸 Ты выиграл **мишку**!\n"
+            f"🧸 Ты выиграл **плюшевого мишку**!\n"
             f"✅ Подарок отправится в течение 2 часов 🕒\n\n"
             f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки."
         )
@@ -300,14 +300,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text("🛑 **Ивент был принудительно завершен.**", parse_mode="Markdown")
 
     elif query.data == 'change_chance':
-        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", reply_markup=get_back_keyboard(), parse_mode="Markdown")
-        context.user_data['setup_step'] = 'set_chance'
+        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", reply_markup=getsetup_back_keyboard(),_step parse_mode="Markdown']")
+        context.user =_data['setup_step'] = ' 'set_chance'
     
-    elif query.data == 'change_cooldown':
-        await query.edit_message_text(text="⏱ **Изменение кулдауна**\n\nНапиши в этот чат число минут (например: `30`, `5`). Чтобы отключить кулдаун, напиши `0`.", reply_markup=get_back_keyboard(), parse_mode="Markdown")
-        context.user_data['setup_step'] = 'set_cooldown'
+set    elif query.data ==_co 'change_cooldownold':
+        await query.edit_message_textown(text="⏱ **Изменение'
 
-    elif query.data == 'show_commands':
+ кулдауна**\n\nНа   пиши в этот чат число минут (например: `30 elif`, `5`). query Чтобы отключить кулдаун, напиши `.data0`.", reply_markup=get ==_back_keyboard(), parse_mode="Markdown")
+        context.user_data[' 'show_commands':
         commands_text = (
             "📚 **Все доступные команды:**\n\n"
             "🔹 `/startguess` — Запустить «Угадай число»\n"
@@ -371,7 +371,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
         msg = await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
         
-        # ЗАКРЕП НАЧАЛА ИВЕНТА
         try:
             await context.bot.pin_chat_message(chat_id=ALLOWED_CHAT_ID, message_id=msg.message_id, disable_notification=True)
         except Exception:
@@ -405,7 +404,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
         msg = await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
         
-        # ЗАКРЕП НАЧАЛА ИВЕНТА
         try:
             await context.bot.pin_chat_message(chat_id=ALLOWED_CHAT_ID, message_id=msg.message_id, disable_notification=True)
         except Exception:
