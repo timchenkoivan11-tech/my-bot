@@ -10,7 +10,7 @@ from flask import Flask
 from threading import Thread
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
+BOT_TOKEN = "СЮДА_ВСТАВЬ_СВОЙ_ТОКЕН"
 ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
 DEFAULT_WIN_CHANCE = 0.1
@@ -35,7 +35,7 @@ def run_flask():
 # --------------------------------
 
 # Глобальные переменные для игр
-active_event = None  # Может быть 'king', 'guess' или None
+active_event = None  
 current_timer_task = None
 current_king_id = None
 current_king_name = None
@@ -108,22 +108,20 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not update.message or not update.message.text: return
     if update.message.chat_id != ALLOWED_CHAT_ID: return
-    if not active_event: return  # Если ивент не запущен, бот молчит
+    if not active_event: return  
     
     user = update.message.from_user
     text = update.message.text.strip()
     
-    # Проверка на админа чата
     try:
         member = await context.bot.get_chat_member(update.message.chat_id, user.id)
         if member.status in [ChatMember.ADMINISTRATOR, ChatMember.CREATOR] or user.id == ADMIN_ID:
-            return  # Админы не участвуют
+            return  
     except Exception:
         pass
 
     user_name = f"@{user.username}" if user.username else user.first_name
 
-    # === ЛОГИКА ЦАРЬ ГОРЫ ===
     if active_event == 'king':
         if current_timer_task and not current_timer_task.done():
             current_timer_task.cancel()
@@ -137,7 +135,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prize = data.get("prize", DEFAULT_PRIZE)
         current_timer_task = asyncio.create_task(run_timer(update.message.chat_id, user.id, user_name, seconds, prize, context))
 
-    # === ЛОГИКА УГАДАЙ ЧИСЛО ===
     elif active_event == 'guess':
         if text.isdigit():
             guess = int(text)
@@ -208,7 +205,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         active_event = 'guess'
-        secret_number = random.randint(1, 1000)  # Загадываем от 1 до 1000
+        secret_number = random.randint(1, 1000)  
         prize = data.get("prize", DEFAULT_PRIZE)
         
         event_text = (
@@ -257,11 +254,11 @@ async def set_prize(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Пиши так: `/setprize Плюшевый мишка`")
         return
     new_prize = " ".join(context.args)
-   Command data["prize"] = new_prize
-Handler    save_data(data)
-    await update.message.reply("_text(f"✅ Приз измененprice на: {new_prize}")
+    data["prize"] = new_prize
+    save_data(data)
+    await update.message.reply_text(f"✅ Приз изменен на: {new_prize}")
 
-async def announce",_price(update: Update, context: announce ContextTypes.DEFAULT_TYPE):
+async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID: return
     if not context.args:
         await update.message.reply_text("❌ Пиши так: `/price 5`")
@@ -277,7 +274,7 @@ def main():
     
     app_bot.add_handler(CommandHandler("start", start_cmd))
     app_bot.add_handler(CommandHandler("setprize", set_prize))
-    app_bot.add_handler(_price))
+    app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CallbackQueryHandler(button_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE, on_message))
     
