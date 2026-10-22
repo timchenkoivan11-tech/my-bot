@@ -108,7 +108,6 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
         )
         msg = await context.bot.send_message(chat_id, text, parse_mode="Markdown")
         
-        # ЗАКРЕП КОНЦА ИВЕНТА
         try:
             await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
         except Exception:
@@ -131,11 +130,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
     
-    # 1. МГНОВЕННАЯ ЗАЩИТА ДЛЯ ТЕБЯ
     if user.id == ADMIN_ID:
         return
 
-    # 2. ЗАЩИТА ДЛЯ ОСТАЛЬНЫХ АДМИНОВ
     try:
         member = await context.bot.get_chat_member(update.message.chat_id, user.id)
         if member.status in ['administrator', 'creator', ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
@@ -145,7 +142,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_name = f"@{user.username}" if user.username else user.first_name
 
-    # ИВЕНТЫ
     if active_event == 'king':
         seconds = data.get("timer", DEFAULT_TIMER)
         if current_timer_task and not current_timer_task.done():
@@ -172,7 +168,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 msg = await context.bot.send_message(update.message.chat_id, win_text, parse_mode="Markdown")
                 
-                # ЗАКРЕП КОНЦА ИГРЫ УГАДАЙ ЧИСЛО
                 try:
                     await context.bot.pin_chat_message(chat_id=update.message.chat_id, message_id=msg.message_id, disable_notification=True)
                 except Exception:
@@ -182,7 +177,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 secret_number = None
         return 
 
-    # МИШКА
     chat_id_str = str(update.message.chat_id)
     user_id_str = str(user.id)
     key = f"{chat_id_str}_{user_id_str}"
@@ -219,13 +213,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.error(f"Ошибка с картинкой мишки: {e}")
             msg = await update.message.reply_text(text_win, parse_mode="Markdown")
         
-        # ЗАКРЕП СООБЩЕНИЯ О ВЫИГРЫШЕ МИШКИ
         try:
             await context.bot.pin_chat_message(chat_id=update.message.chat_id, message_id=msg.message_id, disable_notification=True)
         except Exception:
             pass
 
-        # УВЕДОМЛЕНИЕ ТЕБЕ В ЛИЧКУ
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_ID, 
@@ -300,14 +292,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text("🛑 **Ивент был принудительно завершен.**", parse_mode="Markdown")
 
     elif query.data == 'change_chance':
-        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", reply_markup=getsetup_back_keyboard(),_step parse_mode="Markdown']")
-        context.user =_data['setup_step'] = ' 'set_chance'
+        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", reply_markup=get_back_keyboard(), parse_mode="Markdown")
+        context.user_data['setup_step'] = 'set_chance'
     
-set    elif query.data ==_co 'change_cooldownold':
-        await query.edit_message_textown(text="⏱ **Изменение'
+    elif query.data == 'change_cooldown':
+        await query.edit_message_text(text="⏱ **Изменение кулдауна**\n\nНапиши в этот чат число минут (например: `30`, `5`). Чтобы отключить кулдаун, напиши `0`.", reply_markup=get_back_keyboard(), parse_mode="Markdown")
+        context.user_data['setup_step'] = 'set_cooldown'
 
- кулдауна**\n\nНа   пиши в этот чат число минут (например: `30 elif`, `5`). query Чтобы отключить кулдаун, напиши `.data0`.", reply_markup=get ==_back_keyboard(), parse_mode="Markdown")
-        context.user_data[' 'show_commands':
+    elif query.data == 'show_commands':
         commands_text = (
             "📚 **Все доступные команды:**\n\n"
             "🔹 `/startguess` — Запустить «Угадай число»\n"
