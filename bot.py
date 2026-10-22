@@ -194,7 +194,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ Подарок отправится в течение 2 часов 🕒\n\n"
             f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки."
         )
-        bear_photo = "https://i.postimg.cc/qhh1Hndf/IMG_7671.jpg" 
+        bear_photo = "https://i.postimg.cc/HkwtD6Cd/72BE0C1A-3E12-494D-895E-369895A4E8FF.png" 
         await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="Markdown")
 
 # --- АДМИН-ПАНЕЛЬ ---
