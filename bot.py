@@ -10,7 +10,7 @@ from flask import Flask
 from threading import Thread
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = "8789333228:AAHbpCWdZSlDcj-r5Z84-BnrhYeLcTS5DnA"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
 DEFAULT_WIN_CHANCE = 0.4
