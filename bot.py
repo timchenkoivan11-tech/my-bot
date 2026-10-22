@@ -10,7 +10,7 @@ from flask import Flask
 from threading import Thread
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
+BOT_TOKEN = "8789333228:AAHbpCWdZSlDcj-r5Z84-BnrhYeLcTS5DnA"
 ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
 DEFAULT_WIN_CHANCE = 0.4
@@ -545,8 +545,8 @@ def main():
     
     app_bot.add_handler(CallbackQueryHandler(button_handler))
     
-    # Обработка дайсов (только слоты 🎰)
-    app_bot.add_handler(MessageHandler(filters.Dice.SLOT, on_dice))
+    # Обработка дайсов (всех, но реагируем только на слоты внутри функции)
+    app_bot.add_handler(MessageHandler(filters.Dice.ALL, on_dice))
     
     app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_text_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE, on_message))
