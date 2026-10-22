@@ -11,6 +11,7 @@ from threading import Thread
 # ================= НАСТРОЙКИ =================
 BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
 ADMIN_ID = 5522110735  # СЮДА ВСТАВЬ СВОЙ ID (БЕЗ КАВЫЧЕК)
+ALLOWED_CHAT_ID = -1003797267456
 DEFAULT_WIN_CHANCE = 99
 COOLDOWN_MINUTES = 60
 DATA_FILE = "bot_data.json"
