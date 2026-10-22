@@ -13,7 +13,7 @@ from threading import Thread
 BOT_TOKEN = "8789333228:AAHbI5m71sKP2PVIHUWGLX6gZ8L2AoRq-lE"
 ADMIN_ID = 5522110735  
 ALLOWED_CHAT_ID = -1003797267456  
-DEFAULT_WIN_CHANCE = 0.1
+DEFAULT_WIN_CHANCE = 0.4
 DEFAULT_COOLDOWN = 60  
 DATA_FILE = "bot_data.json"
 
@@ -33,7 +33,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 # --------------------------------
 
-# Глобальные переменные для игр
+# Глобальные переменные
 active_event = None  
 current_timer_task = None
 current_king_id = None
@@ -78,6 +78,9 @@ def get_range_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def get_back_keyboard():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад в меню", callback_data='back_to_menu')]])
+
 # --- Таймер для Царя горы ---
 async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
     global current_king_id, current_king_name, active_event
@@ -103,7 +106,14 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
             f"🎁 Он забирает приз: **{prize}**!\n\n"
             f"Поздравляем! 🎉"
         )
-        await context.bot.send_message(chat_id, text, parse_mode="Markdown")
+        msg = await context.bot.send_message(chat_id, text, parse_mode="Markdown")
+        
+        # ЗАКРЕП КОНЦА ИВЕНТА
+        try:
+            await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
+        except Exception:
+            pass
+            
         active_event = None 
         
     except asyncio.CancelledError:
@@ -121,11 +131,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
     
-    # 🛑 1. МГНОВЕННАЯ ЗАЩИТА ДЛЯ ТЕБЯ (Владельца)
+    # 1. МГНОВЕННАЯ ЗАЩИТА ДЛЯ ТЕБЯ
     if user.id == ADMIN_ID:
         return
 
-    # 🛑 2. ЗАЩИТА ДЛЯ ОСТАЛЬНЫХ АДМИНОВ ЧАТА
+    # 2. ЗАЩИТА ДЛЯ ОСТАЛЬНЫХ АДМИНОВ
     try:
         member = await context.bot.get_chat_member(update.message.chat_id, user.id)
         if member.status in ['administrator', 'creator', ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
@@ -138,7 +148,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ИВЕНТЫ
     if active_event == 'king':
         seconds = data.get("timer", DEFAULT_TIMER)
-        
         if current_timer_task and not current_timer_task.done():
             current_timer_task.cancel()
             if current_king_id != user.id:
@@ -161,7 +170,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🎁 Победитель забирает приз: **{current_prize}**!\n\n"
                     f"Поздравляем! 🎉"
                 )
-                await context.bot.send_message(update.message.chat_id, win_text, parse_mode="Markdown")
+                msg = await context.bot.send_message(update.message.chat_id, win_text, parse_mode="Markdown")
+                
+                # ЗАКРЕП КОНЦА ИГРЫ УГАДАЙ ЧИСЛО
+                try:
+                    await context.bot.pin_chat_message(chat_id=update.message.chat_id, message_id=msg.message_id, disable_notification=True)
+                except Exception:
+                    pass
+                    
                 active_event = None
                 secret_number = None
         return 
@@ -194,8 +210,30 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ Подарок отправится в течение 2 часов 🕒\n\n"
             f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки."
         )
-        bear_photo = "https://i.postimg.cc/HkwtD6Cd/72BE0C1A-3E12-494D-895E-369895A4E8FF.png" 
-        await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="Markdown")
+        
+        bear_photo = "https://i.postimg.cc/pXvngzR7/72BE0C1A-3E12-494D-895E-369895A4E8FF.png"
+        
+        try:
+            msg = await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="Markdown")
+        except Exception as e:
+            logging.error(f"Ошибка с картинкой мишки: {e}")
+            msg = await update.message.reply_text(text_win, parse_mode="Markdown")
+        
+        # ЗАКРЕП СООБЩЕНИЯ О ВЫИГРЫШЕ МИШКИ
+        try:
+            await context.bot.pin_chat_message(chat_id=update.message.chat_id, message_id=msg.message_id, disable_notification=True)
+        except Exception:
+            pass
+
+        # УВЕДОМЛЕНИЕ ТЕБЕ В ЛИЧКУ
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID, 
+                text=f"🔔 **Уведомление!**\n\n{user_name} только что выиграл плюшевого мишку в чате!",
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
 
 # --- АДМИН-ПАНЕЛЬ ---
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -208,6 +246,14 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Кулдаун мишки: **{data.get('cooldown')} мин.**\n\n"
         f"Выбери действие:",
         reply_markup=get_main_menu_keyboard(),
+        parse_mode="Markdown"
+    )
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.chat_id != ALLOWED_CHAT_ID and update.message.chat.type != 'private': return
+    await update.message.reply_text(
+        f"🎲 Шанс на мишку: **{data.get('win_chance', DEFAULT_WIN_CHANCE)}%** с каждого сообщения.\n"
+        f"⏱ Кулдаун после победы: **{data.get('cooldown', DEFAULT_COOLDOWN)} мин.**",
         parse_mode="Markdown"
     )
 
@@ -234,7 +280,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ Другой ивент уже идет!", show_alert=True)
             return
         context.user_data['setup_step'] = 'king_prize'
-        await query.edit_message_text("🎁 **Шаг 1/1:** Напиши в этот чат приз для «Царя горы» (например: 100 рублей):")
+        await query.edit_message_text("🎁 **Шаг 1/1:** Напиши в этот чат приз для «Царя горы» (например: 100 рублей):", reply_markup=get_back_keyboard())
 
     elif query.data == 'setup_guess':
         if active_event:
@@ -246,7 +292,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data in ['range_100', 'range_1000']:
         context.user_data['guess_range'] = 100 if query.data == 'range_100' else 1000
         context.user_data['setup_step'] = 'guess_number'
-        await query.edit_message_text(f"✅ Диапазон: 1-{context.user_data['guess_range']}.\n\n🔢 **Шаг 2/3:** Напиши секретное число (от 1 до {context.user_data['guess_range']}):")
+        await query.edit_message_text(f"✅ Диапазон: 1-{context.user_data['guess_range']}.\n\n🔢 **Шаг 2/3:** Напиши секретное число (от 1 до {context.user_data['guess_range']}):", reply_markup=get_back_keyboard())
 
     elif query.data == 'end_event':
         active_event = None
@@ -254,11 +300,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text("🛑 **Ивент был принудительно завершен.**", parse_mode="Markdown")
 
     elif query.data == 'change_chance':
-        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", parse_mode="Markdown")
+        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши в этот чат число (например: `5` или `0.5`), чтобы изменить шанс.", reply_markup=get_back_keyboard(), parse_mode="Markdown")
         context.user_data['setup_step'] = 'set_chance'
     
     elif query.data == 'change_cooldown':
-        await query.edit_message_text(text="⏱ **Изменение кулдауна**\n\nНапиши в этот чат число минут (например: `30`, `5`). Чтобы отключить кулдаун, напиши `0`.", parse_mode="Markdown")
+        await query.edit_message_text(text="⏱ **Изменение кулдауна**\n\nНапиши в этот чат число минут (например: `30`, `5`). Чтобы отключить кулдаун, напиши `0`.", reply_markup=get_back_keyboard(), parse_mode="Markdown")
         context.user_data['setup_step'] = 'set_cooldown'
 
     elif query.data == 'show_commands':
@@ -267,13 +313,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔹 `/startguess` — Запустить «Угадай число»\n"
             "🔹 `/startking` — Запустить «Царь горы»\n"
             "🔹 `/stop` — Остановить любой ивент\n"
+            "🔹 `/stats` — Узнать шанс мишки\n"
             "🔹 `/price <звезды>` — Объявить цену за сообщения\n\n"
             "💡 *Все настройки призов и чисел делаются в диалоге с ботом.*"
         )
-        back_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data='back_to_menu')]])
-        await query.edit_message_text(text=commands_text, reply_markup=back_keyboard, parse_mode="Markdown")
+        await query.edit_message_text(text=commands_text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
 
     elif query.data == 'back_to_menu':
+        context.user_data['setup_step'] = None
         await query.edit_message_text(
             text=f"👑 **Админ-панель**\n\nВремя: **{data.get('timer')} сек.**\nШанс: **{data.get('win_chance')}%**\nКулдаун: **{data.get('cooldown')} мин.**",
             reply_markup=get_main_menu_keyboard(),
@@ -294,10 +341,10 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             new_chance = float(text.replace(',', '.'))
             data["win_chance"] = new_chance
             save_data(data)
-            await update.message.reply_text(f"✅ Шанс мишки изменен на **{new_chance}%**.", parse_mode="Markdown")
+            await update.message.reply_text(f"✅ Шанс мишки изменен на **{new_chance}%**.", reply_markup=get_main_menu_keyboard(), parse_mode="Markdown")
             context.user_data['setup_step'] = None
         except ValueError:
-            await update.message.reply_text("❌ Это не число. Попробуй еще раз.")
+            await update.message.reply_text("❌ Это не число. Попробуй еще раз.", reply_markup=get_back_keyboard())
         return
     
     if step == 'set_cooldown':
@@ -306,10 +353,10 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if new_cd < 0: raise ValueError
             data["cooldown"] = new_cd
             save_data(data)
-            await update.message.reply_text(f"✅ Кулдаун изменен на **{new_cd} мин.** (0 = отключен).", parse_mode="Markdown")
+            await update.message.reply_text(f"✅ Кулдаун изменен на **{new_cd} мин.** (0 = отключен).", reply_markup=get_main_menu_keyboard(), parse_mode="Markdown")
             context.user_data['setup_step'] = None
         except ValueError:
-            await update.message.reply_text("❌ Нужно ввести целое число минут (например 5 или 0).")
+            await update.message.reply_text("❌ Нужно ввести целое число минут (например 5 или 0).", reply_markup=get_back_keyboard())
         return
 
     if step == 'king_prize':
@@ -322,24 +369,31 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         event_text = f"📣 **Ивент «Царь горы» начался!**\n\n⏳ Цель: **{seconds} сек.**\n\n🎁 Приз: **{current_prize}**\n\n👉 *Напиши сообщение, чтобы запустить таймер!*"
         end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
-        await update.message.reply_text("✅ Царь горы запущен в чате! (Мишка на паузе)")
+        msg = await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
+        
+        # ЗАКРЕП НАЧАЛА ИВЕНТА
+        try:
+            await context.bot.pin_chat_message(chat_id=ALLOWED_CHAT_ID, message_id=msg.message_id, disable_notification=True)
+        except Exception:
+            pass
+            
+        await update.message.reply_text("✅ Царь горы запущен в чате! (Мишка на паузе)", reply_markup=get_main_menu_keyboard())
         return
 
     elif step == 'guess_number':
         if not text.isdigit():
-            await update.message.reply_text("❌ Нужно ввести цифру. Попробуй еще раз.")
+            await update.message.reply_text("❌ Нужно ввести цифру. Попробуй еще раз.", reply_markup=get_back_keyboard())
             return
         
         num = int(text)
         max_range = context.user_data.get('guess_range', 1000)
         if num < 1 or num > max_range:
-            await update.message.reply_text(f"❌ Число должно быть от 1 до {max_range}!")
+            await update.message.reply_text(f"❌ Число должно быть от 1 до {max_range}!", reply_markup=get_back_keyboard())
             return
             
         secret_number = num
         context.user_data['setup_step'] = 'guess_prize'
-        await update.message.reply_text("✅ Число принято!\n\n🎁 **Шаг 3/3:** Напиши приз для победителя:")
+        await update.message.reply_text("✅ Число принято!\n\n🎁 **Шаг 3/3:** Напиши приз для победителя:", reply_markup=get_back_keyboard())
         return
 
     elif step == 'guess_prize':
@@ -349,8 +403,15 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         event_text = f"🎯 **Ивент «Угадай число» начался!**\n\n🎁 Приз: **{current_prize}**\n\n👉 Пиши число от **1 до {context.user_data.get('guess_range', 1000)}** — кто угадает, тот получит приз!"
         end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
-        await update.message.reply_text(f"✅ Игра запущена! Загаданное число: {secret_number} (сохрани в тайне).")
+        msg = await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
+        
+        # ЗАКРЕП НАЧАЛА ИВЕНТА
+        try:
+            await context.bot.pin_chat_message(chat_id=ALLOWED_CHAT_ID, message_id=msg.message_id, disable_notification=True)
+        except Exception:
+            pass
+            
+        await update.message.reply_text(f"✅ Игра запущена! Загаданное число: {secret_number} (сохрани в тайне).", reply_markup=get_main_menu_keyboard())
         return
 
 # --- Текстовые команды ---
@@ -368,7 +429,7 @@ async def cmd_start_king(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Другой ивент уже идет! Останови его (/stop).")
         return
     context.user_data['setup_step'] = 'king_prize'
-    await update.message.reply_text("🎁 **Шаг 1/1:** Напиши приз для «Царя горы» (например: 100 рублей):")
+    await update.message.reply_text("🎁 **Шаг 1/1:** Напиши приз для «Царя горы» (например: 100 рублей):", reply_markup=get_back_keyboard())
 
 async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, secret_number, current_timer_task
@@ -383,7 +444,7 @@ async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_timer_task.cancel()
         
     await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text="🛑 **Ивент был остановлен администратором.**", parse_mode="Markdown")
-    await update.message.reply_text("✅ Ивент остановлен.")
+    await update.message.reply_text("✅ Ивент остановлен.", reply_markup=get_main_menu_keyboard())
 
 async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID: return
@@ -393,7 +454,7 @@ async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price = context.args[0]
     text = f"📢 **ВНИМАНИЕ!**\n\nАдминистратор установил цену за сообщение: **{price} ⭐**."
     await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="Markdown")
-    await update.message.reply_text("✅ Объявление отправлено.")
+    await update.message.reply_text("✅ Объявление отправлено.", reply_markup=get_main_menu_keyboard())
 
 def main():
     Thread(target=run_flask).start()
@@ -403,6 +464,7 @@ def main():
     app_bot.add_handler(CommandHandler("startguess", cmd_start_guess))
     app_bot.add_handler(CommandHandler("startking", cmd_start_king))
     app_bot.add_handler(CommandHandler("stop", cmd_stop))
+    app_bot.add_handler(CommandHandler("stats", stats)) 
     app_bot.add_handler(CommandHandler("price", announce_price))
     
     app_bot.add_handler(CallbackQueryHandler(button_handler))
