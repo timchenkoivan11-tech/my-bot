@@ -53,9 +53,9 @@ def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if "win_chance" not in data: data["win_chance"] = DEFAULT_WIN_CHANCE
+            data["win_chance"] = DEFAULT_WIN_CHANCE
+            data["cooldown"] = DEFAULT_COOLDOWN
             if "timer" not in data: data["timer"] = DEFAULT_TIMER
-            if "cooldown" not in data: data["cooldown"] = DEFAULT_COOLDOWN
             return data
     return {"cooldowns": {}, "win_chance": DEFAULT_WIN_CHANCE, "timer": DEFAULT_TIMER, "cooldown": DEFAULT_COOLDOWN}
 
@@ -264,30 +264,29 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 keyboard = InlineKeyboardMarkup([buttons])
                 msg = await update.message.reply_text(
-                    f"✨ {user_name} выбил три в ряд!\n\nПеред тобой 3 ячейки — в одной из них мишка 🧸. Выбирай!",
+                    f"✨ {user_name} поймал три в ряд — бар / лимон / виноград!\n\nПеред тобой 3 ячейки — в одной из них мишка 🧸. Выбирай!",
                     reply_markup=keyboard
                 )
-                # Сохраняем игру, передаем массив призов и индекс мишки
                 casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'regular', 'bear_index': prizes.index('🧸')}
                 
-            # 777 - Джекпот
+            # 777 - Джекпот (20 ячеек)
             elif val == 64:
-                # 9 призов для сетки 3х3
-                prizes = ['🧸_15', '🌷_25', '🎂_50', '💍_100', '💎_150', '🎁_200', '🚗_500', '🏆_1000', '👑_2000']
+                # 12 мишек, 4 цветка, 2 тортика, 1 кольцо (100), 1 алмаз (100)
+                prizes = ['🧸_15']*12 + ['🌷_25']*4 + ['🎂_50']*2 + ['💍_100'] + ['💎_100']
                 random.shuffle(prizes)
                 
                 buttons = []
                 row = []
                 for i, p in enumerate(prizes):
                     row.append(InlineKeyboardButton("❓", callback_data=f"casino_click_{i}"))
-                    if len(row) == 3: # Делаем по 3 кнопки в ряд
+                    if len(row) == 4: 
                         buttons.append(row)
                         row = []
                 if row: buttons.append(row)
                 
                 keyboard = InlineKeyboardMarkup(buttons)
                 msg = await update.message.reply_text(
-                    f"🎰 **ДЖЕКПОТ 777!** 🎰\n\n🏆 {user_name} сорвал куш!\nВыбирай одну из 9 ячеек — здесь **все** ячейки выигрышные!",
+                    f"✨ {user_name} поймал ДЖЕКПОТ 777! 🎰\n\nПеред тобой 20 ячеек — все они выигрышные! Выбирай!",
                     reply_markup=keyboard
                 )
                 casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'jackpot'}
@@ -346,9 +345,8 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         if game['type'] == 'jackpot':
             btn_text = p.split('_')[0]
 
-        # callback_data="ignore" нужен, чтобы по кнопкам больше нельзя было кликать
         row.append(InlineKeyboardButton(btn_text, callback_data="ignore"))
-        if len(row) == 3: 
+        if len(row) == 4: 
             new_buttons.append(row)
             row = []
     if row: new_buttons.append(row)
@@ -384,8 +382,9 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
             pass
     else:
         lose_text = (
-            f"😔 Увы, {game['user_name']} попал на пустую ячейку.\n\n"
-            f"Вот где был спрятан мишка! В следующий раз повезет!"
+            f"💔 Не повезло, {game['user_name']}...\n"
+            f"Повезёт в следующий раз!\n\n"
+            f"⭐ Купить звёзды (@Lomzustars_Bot)"
         )
         await query.message.edit_text(lose_text, reply_markup=new_keyboard, parse_mode="Markdown")
 
@@ -583,10 +582,10 @@ async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, secret_number, current_timer_task
     if update.message.from_user.id != ADMIN_ID: return
     if not active_event: return
-    active_event = None
-    secret_number = None
+   = active_event = None
+    secret_number = Nonerun
     if current_timer_task and not current_timer_task.done(): current_timer_task.cancel()
-    await context.bot.send_message(chat_id=CHAT_MAIN, text="🛑 **Ивент остановлен.**", parse_mode="Markdown")
+    await context.bot.send_message_fl(chat_id=CHATask)._MAIN, text="🛑 **Ивент остановлен.**", parse_mode="Markdown")
     await update.message.reply_text("✅ Ивент остановлен.", reply_markup=get_main_menu_keyboard())
 
 async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -598,7 +597,7 @@ async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Объявление отправлено.")
 
 def main():
-    Thread(target=run_flask).start()
+    Thread(targetstart()
     app_bot = Application.builder().token(BOT_TOKEN).build()
     
     app_bot.add_handler(CommandHandler("start", start_cmd))
