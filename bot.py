@@ -585,8 +585,7 @@ async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     active_event = None
     secret_number = Nonerun
     if current_timer_task and not current_timer_task.done(): current_timer_task.cancel()
-    await context.bot.send_message_fl(chat_id=CHATask)._MAIN, text="🛑 **Ивент остановлен.**", parse_mode="Markdown")
-    await update.message.reply_text("✅ Ивент остановлен.", reply_markup=get_main_menu_keyboard())
+        await context.bot.send_message(chat_id=CHAT_MAIN, text="🛑 **Ивент остановлен.**", parse_mode="Markdown")
 
 async def announce_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID: return
