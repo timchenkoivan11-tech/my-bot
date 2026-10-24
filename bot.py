@@ -58,7 +58,6 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 data = load_data()
-
 def get_main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("👑 Запустить Царь горы", callback_data='setup_king')],
@@ -117,8 +116,7 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
         pass
     except Exception as e:
         logging.error(f"Ошибка в таймере: {e}")
-
-async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
 
     if not update.message or not update.message.text: return
@@ -208,8 +206,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(ADMIN_ID, text=f"🔔 **Уведомление!**\n\n{user_name} выиграл мишку в основном чате!", parse_mode="Markdown")
         except Exception:
             pass
-
-async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, lucky777_prize
     if not update.message or not update.message.dice: return
     
@@ -322,13 +319,12 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         if game['type'] == 'jackpot' and len(row) == 4:
             new_buttons.append(row)
             row = []
-        elif game['type,'] == 'regular' and len(row) == 3:
+        elif game['type'] == 'regular' and len(row) == 3:
             new_buttons.append(row)
             row = []
- 
             
-    if                row: new_buttons.append(row text)
-    new_keyboard ==f InlineKeyboardMarkup(new_buttons")
+    if row: new_buttons.append(row)
+    new_keyboard = InlineKeyboardMarkup(new_buttons)
 
     if game['type'] == 'regular':
         if click_index == game['bear_index']:
@@ -336,9 +332,9 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
             won_prize_text = "🧸 Мишка (15 ⭐)"
     else: 
         won = True
-        emoji = clicked_pri🎰ze.split('_')[ **0]
-        price = clickedВ_prize.split('_Ы')[1]
-        won_priИze_text = f"{emoГРЫШji} (Стоимость: {price} ⭐)"
+        emoji = clicked_prize.split('_')[0]
+        price = clicked_prize.split('_')[1]
+        won_prize_text = f"{emoji} (Стоимость: {price} ⭐)"
 
     if won:
         win_text = (
@@ -351,7 +347,8 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         
         try:
             await context.bot.send_message(
-                ADMIN_ID В КАЗИНО (Чат №2)!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.\n\n👉 Не забудь выдать приз!", 
+                ADMIN_ID, 
+                text=f"🎰 **ВЫИГРЫШ В КАЗИНО (Чат №2)!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.\n\n👉 Не забудь выдать приз!", 
                 parse_mode="Markdown"
             )
         except Exception:
@@ -367,8 +364,7 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
 async def ignore_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID: return
     context.user_data['setup_step'] = None 
     await update.message.reply_text(
@@ -600,3 +596,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
