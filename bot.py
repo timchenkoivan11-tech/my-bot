@@ -94,7 +94,7 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
             await asyncio.sleep(1)
             await context.bot.send_message(chat_id, f"🔥 <b>{i}</b>...", parse_mode="HTML")
         await asyncio.sleep(1)
-        text = f"👑 <b>ИВЕНТ ЗАВЕРШЕН!</b> 👑\n\n🏆 Победитель: <b>{user_name}</b>\n🎁 Он забирает приз: <b>{prize}</b>!\n\n🎉 Поздравляем!"
+        text = f"👑 <b>ИВЕНТ ЗАВЕРШЕН!</b> 👑\n\n🏆 Победитель: {user_name}\n🎁 Он забирает приз: <b>{prize}</b>!\n\n🎉 Поздравляем!"
         msg = await context.bot.send_message(chat_id, text, parse_mode="HTML")
         try: await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
         except Exception: pass
@@ -114,8 +114,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         member = await context.bot.get_chat_member(chat_id, user.id)
         if member.status in ['administrator', 'creator', ChatMember.ADMINISTRATOR, ChatMember.CREATOR]: return  
     except Exception: pass
-    user_name = html.escape(user.first_name)
-    user_link = f"<a href='tg://user?id={user.id}'>{user_name}</a>"
+    
+    display_name = f"@{user.username}" if user.username else html.escape(user.first_name)
+    user_link = f"<a href='tg://user?id={user.id}'>{display_name}</a>"
+    
     if chat_id == CHAT_CASINO: return
 
     if active_event == 'king':
@@ -123,12 +125,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current_timer_task and not current_timer_task.done():
             current_timer_task.cancel()
             if current_king_id != user.id:
-                await update.message.reply_text(f"⚔️ <b>{user_name} перебивает {current_king_name}!</b>\nОн забирает корону. Новый таймер на {seconds} сек. пошел!", parse_mode="HTML")
+                await update.message.reply_text(f"⚔️ <b>{display_name} перебивает {current_king_name}!</b>\nОн забирает корону. Новый таймер на {seconds} сек. пошел!", parse_mode="HTML")
         else:
-            await update.message.reply_text(f"👑 <b>{user_name} первый!</b>\nОн держит корону. Пошел таймер на {seconds} сек.! Успейте перебить!", parse_mode="HTML")
+            await update.message.reply_text(f"👑 <b>{display_name} первый!</b>\nОн держит корону. Пошел таймер на {seconds} сек.! Успейте перебить!", parse_mode="HTML")
         current_king_id = user.id
-        current_king_name = user_name
-        current_timer_task = asyncio.create_task(run_timer(chat_id, user.id, user_name, seconds, current_prize, context))
+        current_king_name = display_name
+        current_timer_task = asyncio.create_task(run_timer(chat_id, user.id, display_name, seconds, current_prize, context))
         return 
 
     elif active_event == 'guess':
@@ -157,13 +159,19 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cooldowns[key] = now.isoformat()
         data["cooldowns"] = cooldowns
         save_data(data)
-        text_win = f"🎊🎉 <b>ПОЗДРАВЛЯЮ!</b> 🎉🎊\n\n🧸 {user_link}, ты выиграл <b>мишку</b>!\n\n✅ Подарок отправится в течение 2 часов 🕒"
+        
+        text_win = (
+            f"🎊🎉 <b>ПОЗДРАВЛЯЮ!</b> 🎉🎊\n\n"
+            f"🧸 {user_link}, ты выиграл <b>мишку</b>!\n\n"
+            f"✅ Подарок отправится в течение 2 часов 🕒\n\n"
+            f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки!"
+        )
         bear_photo = "https://i.postimg.cc/pXvngzR7/72BE0C1A-3E12-494D-895E-369895A4E8FF.png"
         try: msg = await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="HTML")
         except Exception: msg = await update.message.reply_text(text_win, parse_mode="HTML")
         try:
             await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
-            await context.bot.send_message(ADMIN_ID, text=f"🔔 <b>Уведомление!</b>\n\n{user_name} выиграл мишку!", parse_mode="HTML")
+            await context.bot.send_message(ADMIN_ID, text=f"🔔 <b>Уведомление!</b>\n\n{user_link} выиграл мишку в основном чате!", parse_mode="HTML")
         except Exception: pass
 
 async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -177,8 +185,9 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         member = await context.bot.get_chat_member(chat_id, user.id)
         if member.status in ['administrator', 'creator', ChatMember.ADMINISTRATOR, ChatMember.CREATOR]: return  
     except Exception: pass
-    user_name = html.escape(user.first_name)
-    user_link = f"<a href='tg://user?id={user.id}'>{user_name}</a>"
+    
+    display_name = f"@{user.username}" if user.username else html.escape(user.first_name)
+    user_link = f"<a href='tg://user?id={user.id}'>{display_name}</a>"
     dice = update.message.dice
 
     if chat_id == CHAT_CASINO:
@@ -193,7 +202,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"<blockquote>Перед тобой 3 ячейки — в одной из них мишка 🧸. Выбирай!</blockquote>",
                     reply_markup=InlineKeyboardMarkup([buttons]), parse_mode="HTML"
                 )
-                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user.first_name, 'user_link': user_link, 'prizes': prizes, 'type': 'regular', 'bear_index': prizes.index('🧸')}
+                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': display_name, 'user_link': user_link, 'prizes': prizes, 'type': 'regular', 'bear_index': prizes.index('🧸')}
             elif val == 64:
                 prizes = ['🧸_15']*12 + ['💖_25']*4 + ['🌹_50']*3 + ['💍_100']*2 + ['🎁_150']*2 + ['🚀_200']*1 + ['💎_100']*1
                 random.shuffle(prizes)
@@ -210,7 +219,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"<blockquote>Перед тобой 25 ячеек. Открой любую — и гарантированно забери свой приз 🏆</blockquote>",
                     reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML"
                 )
-                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user.first_name, 'user_link': user_link, 'prizes': prizes, 'type': 'jackpot'}
+                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': display_name, 'user_link': user_link, 'prizes': prizes, 'type': 'jackpot'}
         return 
 
     if chat_id == CHAT_MAIN:
@@ -220,7 +229,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg = await context.bot.send_message(chat_id, win_text, parse_mode="HTML")
                 try:
                     await context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
-                    await context.bot.send_message(ADMIN_ID, text=f"🔔 <b>Джекпот!</b>\n\n{user_name} выбил 777: {lucky777_prize}", parse_mode="HTML")
+                    await context.bot.send_message(ADMIN_ID, text=f"🔔 <b>Джекпот!</b>\n\n{user_link} выбил 777: {lucky777_prize}", parse_mode="HTML")
                 except Exception: pass
                 active_event = None
                 lucky777_prize = None
@@ -262,25 +271,20 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         emoji, price = clicked_prize.split('_')[0], clicked_prize.split('_')[1]
         won_prize_text = f"{emoji} (Стоимость: {price} ⭐)"
 
-    # 1. Убираем кнопки со старого сообщения (вскрываем ячейки)
-    try:
-        await query.message.edit_reply_markup(reply_markup=new_keyboard)
-    except Exception:
-        pass
+    # Убираем кнопки со старого сообщения (вскрываем ячейки)
+    try: await query.message.edit_reply_markup(reply_markup=new_keyboard)
+    except Exception: pass
 
-    # 2. Отправляем результат НОВЫМ сообщением
+    # Отправляем результат НОВЫМ сообщением
     if won:
         win_text = f"🎉🥳 <b>ПОБЕДА!</b> 🥳🎉\n\n🏆 {game['user_link']} открыл ячейку и забирает:\n🎁 <b>{won_prize_text}</b>\n\n📩 Свяжитесь с админом! @твой_ник_админа"
-        try:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=win_text, parse_mode="HTML")
+        try: await context.bot.send_message(chat_id=query.message.chat_id, text=win_text, parse_mode="HTML")
         except Exception: pass
-        try:
-            await context.bot.send_message(ADMIN_ID, text=f"🎰 <b>ВЫИГРЫШ В КАЗИНО!</b>\n\n🏆 {game['user_name']} выиграл {won_prize_text}.", parse_mode="HTML")
+        try: await context.bot.send_message(ADMIN_ID, text=f"🎰 <b>ВЫИГРЫШ В КАЗИНО!</b>\n\n🏆 {game['user_link']} выиграл {won_prize_text}.", parse_mode="HTML")
         except Exception: pass
     else:
         lose_text = f"💔 Не повезло, {game['user_link']}...\nПовезёт в следующий раз!"
-        try:
-            await context.bot.send_message(chat_id=query.message.chat_id, text=lose_text, parse_mode="HTML")
+        try: await context.bot.send_message(chat_id=query.message.chat_id, text=lose_text, parse_mode="HTML")
         except Exception: pass
             
     if msg_id in casino_games: del casino_games[msg_id]
