@@ -13,7 +13,7 @@ from threading import Thread
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = 5522110735  
 
-CHAT_MAIN = -1003797267456      # Основной чат (мишки, ивенты)
+CHAT_MAIN = -1003797267456      # Основной чат
 CHAT_CASINO = -5431231286       # Новый чат (казино)
 
 DEFAULT_WIN_CHANCE = 0.4
@@ -143,10 +143,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.id == ADMIN_ID: return
 
     try:
-        memberИ = await context.botН.get_chat_member(chat_id, user.id)
-       ГО if member.status in ['administrator', 'creator',! ChatMember.ADMINISTRATOR, Chat**Member.CREATOR]:
+        member = await context.bot.get_chat_member(chat_id, user.id)
+        if member.status in ['administrator', 'creator', ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
             return  
-   \ except Exception:
+    except Exception:
         pass
 
     user_name = f"@{user.username}" if user.username else user.first_name
@@ -174,7 +174,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             guess = int(text)
             if guess == secret_number:
                 win_text = (
-                    f"🎯 **Бn\n"
+                    f"🎯 **БИНГО!**\n\n"
                     f"🏆 {user_name} угадал загаданное число (**{secret_number}**)!\n"
                     f"🎁 Победитель забирает приз: **{current_prize}**!\n\n"
                     f"Поздравляем! 🎉"
@@ -267,8 +267,8 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"✨ {user_name} выбил три в ряд!\n\nПеред тобой 3 ячейки — в одной из них мишка 🧸. Выбирай!",
                     reply_markup=keyboard
                 )
-                # Сохраняем игру, передаем массив призов и тип игры
-                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'regular'}
+                # Сохраняем игру, передаем массив призов и индекс мишки
+                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'regular', 'bear_index': prizes.index('🧸')}
                 
             # 777 - Джекпот
             elif val == 64:
@@ -329,9 +329,8 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     await query.answer()
-    del casino_games[msg_id] # Удаляем игру из памяти
+    del casino_games[msg_id] 
     
-    # Получаем индекс нажатой кнопки
     click_index = int(query.data.split('_')[-1])
     prizes = game['prizes']
     clicked_prize = prizes[click_index]
@@ -343,27 +342,28 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Формируем новую клавиатуру, где всё вскрыто
     for p in prizes:
-        if game['type'] == 'regular':
-            btn_text = p
-            if p == '🧸':
-                won = True
-                won_prize_text = "🧸 Мишка (15 ⭐)"
-        else: # jackpot
-            emoji = p.split('_')[0]
-            price = p.split('_')[1]
-            btn_text = emoji
-            if p == clicked_prize:
-                won = True
-                won_prize_text = f"{emoji} (Стоимость: {price} ⭐)"
+        btn_text = p
+        if game['type'] == 'jackpot':
+            btn_text = p.split('_')[0]
 
         # callback_data="ignore" нужен, чтобы по кнопкам больше нельзя было кликать
         row.append(InlineKeyboardButton(btn_text, callback_data="ignore"))
-        if len(row) == 3: # Для джекпота по 3 в ряд, для обычной 3 кнопки тоже влезут
+        if len(row) == 3: 
             new_buttons.append(row)
             row = []
     if row: new_buttons.append(row)
 
     new_keyboard = InlineKeyboardMarkup(new_buttons)
+
+    if game['type'] == 'regular':
+        if click_index == game['bear_index']:
+            won = True
+            won_prize_text = "🧸 Мишка (15 ⭐)"
+    else: # jackpot
+        won = True
+        emoji = clicked_prize.split('_')[0]
+        price = clicked_prize.split('_')[1]
+        won_prize_text = f"{emoji} (Стоимость: {price} ⭐)"
 
     if won:
         win_text = (
@@ -377,7 +377,7 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             await context.bot.send_message(
                 ADMIN_ID, 
-                text=f"🎰 **ВЫИГРЫШ В КАЗИНО (Чат №2)!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.\n\n👉 Не забудь выдать приз в чате казино!", 
+                text=f"🎰 **ВЫИГРЫШ В КАЗИНО (Чат №2)!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.\n\n👉 Не забудь выдать приз!", 
                 parse_mode="Markdown"
             )
         except Exception:
@@ -608,11 +608,8 @@ def main():
     app_bot.add_handler(CommandHandler("stats", stats)) 
     app_bot.add_handler(CommandHandler("price", announce_price))
     
-    # Обработчик кнопок админки
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu)"))
-    # Обработчик кнопок казино
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
-    # Обработчик для вскрытых (некликабельных) кнопок
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
     
     app_bot.add_handler(MessageHandler(filters.Dice.ALL, on_dice))
