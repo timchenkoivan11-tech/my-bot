@@ -123,12 +123,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not update.message or not update.message.text: 
         return
+    
     chat_id = update.message.chat_id
     if chat_id not in [CHAT_MAIN, CHAT_CASINO]: 
         return
     
     user = update.message.from_user
     text = update.message.text.strip()
+    
     if user.id == ADMIN_ID: 
         return
 
@@ -140,6 +142,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     user_name = f"@{user.username}" if user.username else user.first_name
+    
     if chat_id == CHAT_CASINO: 
         return
 
@@ -248,10 +251,9 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 keyboard = InlineKeyboardMarkup([buttons])
                 msg = await update.message.reply_text(
-                    f"✨ **{user_name} поймал три в ряд** — бар / лимон / виноград!\n\n"
+                    f"✨ {user_name} поймал три в ряд — бар / лимон / виноград!\n\n"
                     f"🍀 Перед тобой 3 ячейки — в одной из них мишка 🧸. Выбирай!",
-                    reply_markup=keyboard,
-                    parse_mode="Markdown"
+                    reply_markup=keyboard
                 )
                 casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'regular', 'bear_index': prizes.index('🧸')}
                 
@@ -269,10 +271,9 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 keyboard = InlineKeyboardMarkup(buttons)
                 msg = await update.message.reply_text(
-                    f"🔥✨ **{user_name} поймал ДЖЕКПОТ 777!** 🎰🔥\n\n"
-                    f"💰 Перед тобой 20 ячеек — здесь **ВСЕ** ячейки выигрышные! Выбирай!",
-                    reply_markup=keyboard,
-                    parse_mode="Markdown"
+                    f"🔥✨ {user_name} поймал ДЖЕКПОТ 777! 🎰🔥\n\n"
+                    f"💰 Перед тобой 20 ячеек — здесь ВСЕ ячейки выигрышные! Выбирай!",
+                    reply_markup=keyboard
                 )
                 casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'jackpot'}
         return 
@@ -299,17 +300,22 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
     msg_id = query.message.message_id
     
     if msg_id not in casino_games:
-        await query.answer("Эта игра уже завершена.", show_alert=True)
+        await query.answer("Игра уже завершена.", show_alert=False)
         return
 
     game = casino_games[msg_id]
-    if query.from_user.id != game['user_id']:
-        await query.answer("Это не твоя игра! Кидай свои слоты.", show_alert=True)
-        return
-
-    await query.answer()
-    del casino_games[msg_id] 
     
+    if query.from_user.id != game['user_id']:
+        await query.answer("Это не твоя игра! Кидай свои слоты.", show_alert=False)
+        return
+        
+    if game.get('active') == False:
+        await query.answer("Ты уже сделал выбор!", show_alert=False)
+        return
+    
+    game['active'] = False
+    await query.answer()
+
     click_index = int(query.data.split('_')[-1])
     prizes = game['prizes']
     clicked_prize = prizes[click_index]
@@ -348,28 +354,37 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     if won:
         win_text = (
-            f"🎉🥳 **ПОБЕДА!** 🥳🎉\n\n"
+            f"🎉🥳 ПОБЕДА! 🥳🎉\n\n"
             f"🏆 {game['user_name']} открыл ячейку и забирает:\n"
-            f"🎁 **{won_prize_text}**\n\n"
+            f"🎁 {won_prize_text}\n\n"
             f"📩 Свяжитесь с админом для получения! @твой_ник_админа"
         )
-        await query.message.edit_text(win_text, reply_markup=new_keyboard, parse_mode="Markdown")
+        try:
+            await query.message.edit_text(win_text, reply_markup=new_keyboard)
+        except Exception:
+            pass
         
         try:
             await context.bot.send_message(
                 ADMIN_ID, 
-                text=f"🎰 **ВЫИГРЫШ В КАЗИНО (Чат №2)!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.\n\n👉 Не забудь выдать приз!", 
+                text=f"🎰 **ВЫИГРЫШ В КАЗИНО (Чат №2)!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.", 
                 parse_mode="Markdown"
             )
         except Exception:
             pass
     else:
         lose_text = (
-            f"💔 **Не повезло, {game['user_name']}...**\n\n"
+            f"💔 Не повезло, {game['user_name']}...\n\n"
             f"😔 Вот где был спрятан мишка!\nПовезёт в следующий раз!\n\n"
-            f"⭐ **Купить звёзды:** (@Lomzustars_Bot)"
+            f"⭐ Купить звёзды: (@Lomzustars_Bot)"
         )
-        await query.message.edit_text(lose_text, reply_markup=new_keyboard, parse_mode="Markdown")
+        try:
+            await query.message.edit_text(lose_text, reply_markup=new_keyboard)
+        except Exception:
+            pass
+            
+    if msg_id in casino_games:
+        del casino_games[msg_id]
 
 async def ignore_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
