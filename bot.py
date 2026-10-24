@@ -157,7 +157,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cooldowns[key] = now.isoformat()
         data["cooldowns"] = cooldowns
         save_data(data)
-        text_win = f"🎉 <b>ПОЗДРАВЛЯЮ!</b> 🎉\n\n🧸 {user_link}, ты выиграл <b>мишку</b>!\n\n✅ Подарок отправится в течение 2 часов 🕒"
+        text_win = f"🎊🎉 <b>ПОЗДРАВЛЯЮ!</b> 🎉🎊\n\n🧸 {user_link}, ты выиграл <b>мишку</b>!\n\n✅ Подарок отправится в течение 2 часов 🕒"
         bear_photo = "https://i.postimg.cc/pXvngzR7/72BE0C1A-3E12-494D-895E-369895A4E8FF.png"
         try: msg = await update.message.reply_photo(photo=bear_photo, caption=text_win, parse_mode="HTML")
         except Exception: msg = await update.message.reply_text(text_win, parse_mode="HTML")
@@ -262,15 +262,25 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         emoji, price = clicked_prize.split('_')[0], clicked_prize.split('_')[1]
         won_prize_text = f"{emoji} (Стоимость: {price} ⭐)"
 
+    # 1. Убираем кнопки со старого сообщения (вскрываем ячейки)
+    try:
+        await query.message.edit_reply_markup(reply_markup=new_keyboard)
+    except Exception:
+        pass
+
+    # 2. Отправляем результат НОВЫМ сообщением
     if won:
         win_text = f"🎉🥳 <b>ПОБЕДА!</b> 🥳🎉\n\n🏆 {game['user_link']} открыл ячейку и забирает:\n🎁 <b>{won_prize_text}</b>\n\n📩 Свяжитесь с админом! @твой_ник_админа"
-        try: await query.message.edit_text(win_text, reply_markup=new_keyboard, parse_mode="HTML")
+        try:
+            await context.bot.send_message(chat_id=query.message.chat_id, text=win_text, parse_mode="HTML")
         except Exception: pass
-        try: await context.bot.send_message(ADMIN_ID, text=f"🎰 <b>ВЫИГРЫШ В КАЗИНО!</b>\n\n🏆 {game['user_name']} выиграл {won_prize_text}.", parse_mode="HTML")
+        try:
+            await context.bot.send_message(ADMIN_ID, text=f"🎰 <b>ВЫИГРЫШ В КАЗИНО!</b>\n\n🏆 {game['user_name']} выиграл {won_prize_text}.", parse_mode="HTML")
         except Exception: pass
     else:
         lose_text = f"💔 Не повезло, {game['user_link']}...\nПовезёт в следующий раз!"
-        try: await query.message.edit_text(lose_text, reply_markup=new_keyboard, parse_mode="HTML")
+        try:
+            await context.bot.send_message(chat_id=query.message.chat_id, text=lose_text, parse_mode="HTML")
         except Exception: pass
             
     if msg_id in casino_games: del casino_games[msg_id]
