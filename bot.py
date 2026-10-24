@@ -58,6 +58,7 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 data = load_data()
+
 def get_main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("👑 Запустить Царь горы", callback_data='setup_king')],
@@ -116,16 +117,20 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
         pass
     except Exception as e:
         logging.error(f"Ошибка в таймере: {e}")
-async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
 
-    if not update.message or not update.message.text: return
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
+
+    if not update.message or not update.message.text: 
+        return
     chat_id = update.message.chat_id
-    if chat_id not in [CHAT_MAIN, CHAT_CASINO]: return
+    if chat_id not in [CHAT_MAIN, CHAT_CASINO]: 
+        return
     
     user = update.message.from_user
     text = update.message.text.strip()
-    if user.id == ADMIN_ID: return
+    if user.id == ADMIN_ID: 
+        return
 
     try:
         member = await context.bot.get_chat_member(chat_id, user.id)
@@ -135,7 +140,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     user_name = f"@{user.username}" if user.username else user.first_name
-    if chat_id == CHAT_CASINO: return
+    if chat_id == CHAT_CASINO: 
+        return
 
     if active_event == 'king':
         seconds = data.get("timer", DEFAULT_TIMER)
@@ -206,15 +212,19 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(ADMIN_ID, text=f"🔔 **Уведомление!**\n\n{user_name} выиграл мишку в основном чате!", parse_mode="Markdown")
         except Exception:
             pass
-            async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, lucky777_prize
-    if not update.message or not update.message.dice: return
+    if not update.message or not update.message.dice: 
+        return
     
     chat_id = update.message.chat_id
-    if chat_id not in [CHAT_MAIN, CHAT_CASINO]: return
+    if chat_id not in [CHAT_MAIN, CHAT_CASINO]: 
+        return
 
     user = update.message.from_user
-    if user.id == ADMIN_ID: return
+    if user.id == ADMIN_ID: 
+        return
     
     try:
         member = await context.bot.get_chat_member(chat_id, user.id)
@@ -364,7 +374,8 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
 async def ignore_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID: return
     context.user_data['setup_step'] = None 
     await update.message.reply_text(
@@ -557,7 +568,8 @@ async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not active_event: return
     active_event = None
     secret_number = None
-    if current_timer_task and not current_timer_task.done(): current_timer_task.cancel()
+    if current_timer_task and not current_timer_task.done(): 
+        current_timer_task.cancel()
     
     msg_text = "🛑 **Ивент остановлен.**"
     await context.bot.send_message(chat_id=CHAT_MAIN, text=msg_text, parse_mode="Markdown")
@@ -596,4 +608,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
