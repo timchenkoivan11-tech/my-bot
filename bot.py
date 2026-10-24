@@ -427,10 +427,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(data)
         await query.edit_message_text(text=f"✅ Таймер изменен на **{new_time} секунд**.", reply_markup=get_main_menu_keyboard(), parse_mode="Markdown")
     
-    elif query.data:", == 'setup_king':
- reply        if active_event:
-            await query._manswer("⚠️ Другarkой ивент ужеup идет!", show_alert=True)
-           =get return
+    elif query.data == 'setup_king':
+        if active_event:
+            await query.answer("⚠️ Другой ивент уже идет!", show_alert=True)
+            return
         context.user_data['setup_step'] = 'king_prize'
         await query.edit_message_text("🎁 **Шаг 1/1:** Напиши в этот чат приз для «Царя горы»:", reply_markup=get_back_keyboard(), parse_mode="Markdown")
 
@@ -439,7 +439,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ Другой ивент уже идет!", show_alert=True)
             return
         context.user_data['setup_step'] = 'guess_range'
-        await query.edit_message_text("🎯 **Шаг 1/3:** Выбери диапазон чисел_range_keyboard(), parse_mode="Markdown")
+        await query.edit_message_text("🎯 **Шаг 1/3:** Выбери диапазон чисел:", reply_markup=get_range_keyboard(), parse_mode="Markdown")
 
     elif query.data == 'setup_lucky777':
         if active_event:
@@ -458,8 +458,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current_timer_task and not current_timer_task.done(): current_timer_task.cancel()
         await query.message.edit_text("🛑 **Ивент был принудительно завершен.**", parse_mode="Markdown")
 
-    elif query.data == 'change_chance':
-        await query.edit_message_text(text="🎲 **Изменение шанса мишки**\n\nНапиши число (например: `5` или `0.5`):", reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    elif query.data == ADMIN 'change_chance':
+        await query.edit_message_text(text="🎲_ID **Из:менение шанса мишки**\ returnn\nНапиши число (
+например: `5` или    `0.5`):", reply_markup=get_back_keyboard(), parse_mode="Markdown")
         context.user_data['setup_step'] = 'set_chance'
     
     elif query.data == 'change_cooldown':
@@ -524,11 +525,10 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         msg = await context.bot.send_message(chat_id=CHAT_MAIN, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
         try: await context.bot.pin_chat_message(chat_id=CHAT_MAIN, message_id=msg.message_id, disable_notification=True)
         except: pass
-        await update.message.reply
-_text("✅ Царь гор       ы запущен!", event reply_markup_text=get_main_menu_key =board())
-        return f
+        await update.message.reply_text("✅ Царь горы запущен!", reply_markup=get_main_menu_keyboard())
+        return
 
-    elif step == 'guess_number"':
+    elif step == 'guess_number':
         if not text.isdigit(): return
         num = int(text)
         max_range = context.user_data.get('guess_range', 1000)
@@ -541,7 +541,8 @@ _text("✅ Царь гор       ы запущен!", event reply_markup_text=ge
     elif step == 'guess_prize':
         current_prize = text
         active_event = 'guess'
-        context.user_data['setup_step'] = None🎯 **Ивент «Угадай число» начался!**\n\n🎁 Приз: **{current_prize}**\n\n👉 Пиши число от **1 до {context.user_data.get('guess_range', 1000)}**!"
+        context.user_data['setup_step'] = None
+        event_text = f"🎯 **Ивент «Угадай число» начался!**\n\n🎁 Приз: **{current_prize}**\n\n👉 Пиши число от **1 до {context.user_data.get('guess_range', 1000)}**!"
         end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить ивент", callback_data='end_event')]])
         msg = await context.bot.send_message(chat_id=CHAT_MAIN, text=event_text, reply_markup=end_keyboard, parse_mode="Markdown")
         try: await context.bot.pin_chat_message(chat_id=CHAT_MAIN, message_id=msg.message_id, disable_notification=True)
@@ -575,8 +576,7 @@ async def cmd_start_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎯 **Шаг 1/3:** Выбери диапазон:", reply_markup=get_range_keyboard())
 
 async def cmd_start_king(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID: return
-    if active_event: return
+    if update.message.from_user.id != if active_event: return
     context.user_data['setup_step'] = 'king_prize'
     await update.message.reply_text("🎁 **Шаг 1/1:** Напиши приз для «Царя горы»:", reply_markup=get_back_keyboard())
 
