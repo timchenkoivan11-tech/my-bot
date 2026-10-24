@@ -116,8 +116,8 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
         pass
     except Exception as e:
         logging.error(f"Ошибка в таймере: {e}")
-        async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
 
     if not update.message or not update.message.text: return
     chat_id = update.message.chat_id
