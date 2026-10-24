@@ -3,6 +3,7 @@ import random
 import json
 import os
 import asyncio
+import html
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
@@ -236,7 +237,8 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    user_name = f"@{user.username}" if user.username else user.first_name
+    user_name = html.escape(user.first_name)
+    user_link = f"<a href='tg://user?id={user.id}'>{user_name}</a>"
     dice = update.message.dice
 
     if chat_id == CHAT_CASINO:
@@ -250,12 +252,14 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     buttons.append(InlineKeyboardButton("❓", callback_data=f"casino_click_{i}"))
                 
                 keyboard = InlineKeyboardMarkup([buttons])
+                # Красивый HTML-текст с цитатой
                 msg = await update.message.reply_text(
-                    f"✨ {user_name} поймал три в ряд — бар / лимон / виноград!\n\n"
-                    f"🍀 Перед тобой 3 ячейки — в одной из них мишка 🧸. Выбирай!",
-                    reply_markup=keyboard
+                    f"✨ {user_link} поймал три в ряд — бар / лимон / виноград!\n\n"
+                    f"<blockquote>Перед тобой 3 ячейки — в одной из них мишка 🧸. Выбирай!</blockquote>",
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
                 )
-                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'regular', 'bear_index': prizes.index('🧸')}
+                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user.first_name, 'user_link': user_link, 'prizes': prizes, 'type': 'regular', 'bear_index': prizes.index('🧸')}
                 
             elif val == 64:
                 prizes = ['🧸_15']*12 + ['🌷_25']*4 + ['🎂_50']*2 + ['💍_100'] + ['💎_100']
@@ -271,11 +275,12 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 keyboard = InlineKeyboardMarkup(buttons)
                 msg = await update.message.reply_text(
-                    f"🔥✨ {user_name} поймал ДЖЕКПОТ 777! 🎰🔥\n\n"
-                    f"💰 Перед тобой 20 ячеек — здесь ВСЕ ячейки выигрышные! Выбирай!",
-                    reply_markup=keyboard
+                    f"🔥✨ {user_link} поймал ДЖЕКПОТ 777! 🎰🔥\n\n"
+                    f"<blockquote>💰 Перед тобой 20 ячеек — здесь ВСЕ ячейки выигрышные! Выбирай!</blockquote>",
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
                 )
-                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user_name, 'prizes': prizes, 'type': 'jackpot'}
+                casino_games[msg.message_id] = {'user_id': user.id, 'user_name': user.first_name, 'user_link': user_link, 'prizes': prizes, 'type': 'jackpot'}
         return 
 
     if chat_id == CHAT_MAIN:
@@ -354,32 +359,32 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     if won:
         win_text = (
-            f"🎉🥳 ПОБЕДА! 🥳🎉\n\n"
-            f"🏆 {game['user_name']} открыл ячейку и забирает:\n"
-            f"🎁 {won_prize_text}\n\n"
+            f"🎉🥳 <b>ПОБЕДА!</b> 🥳🎉\n\n"
+            f"🏆 {game['user_link']} открыл ячейку и забирает:\n"
+            f"🎁 <b>{won_prize_text}</b>\n\n"
             f"📩 Свяжитесь с админом для получения! @твой_ник_админа"
         )
         try:
-            await query.message.edit_text(win_text, reply_markup=new_keyboard)
+            await query.message.edit_text(win_text, reply_markup=new_keyboard, parse_mode="HTML")
         except Exception:
             pass
         
         try:
             await context.bot.send_message(
                 ADMIN_ID, 
-                text=f"🎰 **ВЫИГРЫШ В КАЗИНО (Чат №2)!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.", 
+                text=f"🎰 **ВЫИГРЫШ В КАЗИНО!**\n\n🏆 {game['user_name']} выиграл {won_prize_text}.", 
                 parse_mode="Markdown"
             )
         except Exception:
             pass
     else:
+        # УБРАЛИ РЕКЛАМУ, СДЕЛАЛИ КРАСИВУЮ ЦИТАТУ
         lose_text = (
-            f"💔 Не повезло, {game['user_name']}...\n\n"
-            f"😔 Вот где был спрятан мишка!\nПовезёт в следующий раз!\n\n"
-            f"⭐ Купить звёзды: (@Lomzustars_Bot)"
+            f"💔 Не повезло, {game['user_link']}...\n\n"
+            f"<blockquote>😔 Вот где был спрятан мишка!\nПовезёт в следующий раз!</blockquote>"
         )
         try:
-            await query.message.edit_text(lose_text, reply_markup=new_keyboard)
+            await query.message.edit_text(lose_text, reply_markup=new_keyboard, parse_mode="HTML")
         except Exception:
             pass
             
@@ -442,7 +447,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if active_event:
             await query.answer("⚠️ Другой ивент уже идет!", show_alert=True)
             return
-        context.user_data['setup_step'] = 'lucky777_prize'
+        context.user_data['setup_step'] = 'lucky777_pri"
+ze'
         await query.edit_message_text("🎁 **Шаг 1/2:** Напиши приз для «Лудки 777»:", reply_markup=get_back_keyboard(), parse_mode="Markdown")
 
     elif query.data in ['range_100', 'range_1000']:
@@ -466,8 +472,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'show_commands':
         commands_text = (
             "📚 **Все доступные команды:**\n\n"
-            "🔹 `/startguess` — Запустить «Угадай число»\n"
-            "🔹 `/startking` — Запустить «Царь горы»\n"
+            "🔹 `/startguess` — Запустить «Угадай число»\n            "🔹 `/startking` — Запустить «Царь горы»\n"
             "🔹 `/stop` — Остановить любой ивент\n"
             "🔹 `/stats` — Узнать шанс мишки\n"
             "🔹 `/price <звезды>` — Объявить цену за сообщения\n\n"
