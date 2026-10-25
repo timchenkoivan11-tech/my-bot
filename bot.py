@@ -418,12 +418,23 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data['prank_nft_name'] = text
         context.user_data['prank_photo'] = None 
         context.user_data['setup_step'] = 'prank_price'
-        await msg.reply_text("✅ Название принято!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 ⭐, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
+        await msg.reply_text("✅ Название принято!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 звезд, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
         return
     elif step == 'prank_price':
+        price_input = text.lower()
+        if "звезд" in price_input or "⭐" in price_input or "stars" in price_input:
+            emoji = '<tg-emoji emoji-id="5368324170671202286">⭐</tg-emoji>'
+        elif "ton" in price_input or "тон" in price_input:
+            emoji = '<tg-emoji emoji-id="5431432882544297528">💎</tg-emoji>'
+        elif "грамм" in price_input:
+            emoji = '🪙'
+        else:
+            emoji = '💰'
+            
         context.user_data['prank_price'] = text
+        context.user_data['prank_emoji'] = emoji
         context.user_data['setup_step'] = None
-        await msg.reply_text("✅ Настройка готова!\n\nТеперь зайди в чат, ответь на сообщение друга и напиши команду /send_offer.", reply_markup=get_main_menu_keyboard())
+        await msg.reply_text(f"✅ Настройка готова!\n\nВалюта: {text} {emoji}\n\nТеперь в чате ответь на сообщение друга и напиши /offer", reply_markup=get_main_menu_keyboard(), parse_mode="HTML")
         return
 
 async def admin_photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -433,7 +444,7 @@ async def admin_photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data['prank_photo'] = msg.photo[-1].file_id
         context.user_data['prank_nft_name'] = "Крутой NFT"
         context.user_data['setup_step'] = 'prank_price'
-        await msg.reply_text("✅ Картинка сохранена!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 ⭐, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
+        await msg.reply_text("✅ Картинка сохранена!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 звезд, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
 
 async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
@@ -450,10 +461,11 @@ async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     business_id = getattr(msg, 'business_connection_id', None)
     
     nft = context.user_data.get('prank_nft_name', 'Ценный NFT')
-    price = context.user_data.get('prank_price', '200 ⭐')
+    price_text = context.user_data.get('prank_price', '200')
+    emoji = context.user_data.get('prank_emoji', '⭐')
     photo = context.user_data.get('prank_photo')
     
-    text = f"<b>Пользователь {target_name} предлагает\nВам {price} за подарок\n{nft}.</b>"
+    text = f"<b>Пользователь {target_name} предлагает\nВам {price_text} {emoji} за подарок\n{nft}.</b>"
     
     keyboard = [[
         InlineKeyboardButton("❌ Отклонить", callback_data="prank_reject"),
@@ -513,6 +525,7 @@ def main():
     app_bot.add_handler(CommandHandler("stats", stats)) 
     app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
+    app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
