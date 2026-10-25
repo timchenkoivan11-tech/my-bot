@@ -5,7 +5,7 @@ import os
 import asyncio
 import html
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember, InlineQueryResultPhoto, InlineQueryResultArticle, InputTextMessageContent
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember, InlineQueryResultPhoto
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler, InlineQueryHandler
 from flask import Flask
 from threading import Thread
@@ -306,7 +306,7 @@ async def inline_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nft = config['nft']
     price = config['price']
     emoji = config['emoji']
-    photo_url = config['photo']
+    photo_url = config.get('photo')
     
     if not photo_url or not str(photo_url).startswith("http"):
         photo_url = "https://i.postimg.cc/pXvngzR7/72BE0C1A-3E12-494D-895E-369895A4E8FF.png"
@@ -373,7 +373,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🎁 Напиши приз для «Лудки 777»:", reply_markup=get_back_keyboard())
     elif query.data == 'prank_setup':
         context.user_data['setup_step'] = 'prank_nft'
-        await query.edit_message_text("🤡 <b>Настройка пранка</b>\n\nШаг 1: Отправь мне картинку NFT (или напиши его название):", parse_mode="HTML", reply_markup=get_back_keyboard())
+        await query.edit_message_text("🤡 <b>Настройка пранка</b>\n\nШаг 1: Отправь мне ссылку на картинку NFT (начинается с http):", parse_mode="HTML", reply_markup=get_back_keyboard())
     elif query.data in ['range_100', 'range_1000']:
         context.user_data['guess_range'] = 100 if query.data == 'range_100' else 1000
         context.user_data['setup_step'] = 'guess_number'
@@ -465,9 +465,9 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     elif step == 'prank_nft':
         context.user_data['prank_nft_name'] = text
-        context.user_data['prank_photo'] = None 
+        context.user_data['prank_photo'] = text 
         context.user_data['setup_step'] = 'prank_price'
-        await msg.reply_text("✅ Название принято!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 звезд, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
+        await msg.reply_text("✅ Ссылка принята!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 3000 звезд, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
         return
     elif step == 'prank_price':
         price_input = text.lower()
@@ -501,7 +501,7 @@ async def admin_photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data['prank_photo'] = msg.photo[-1].file_id
         context.user_data['prank_nft_name'] = "Крутой NFT"
         context.user_data['setup_step'] = 'prank_price'
-        await msg.reply_text("✅ Картинка сохранена!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 200 звезд, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
+        await msg.reply_text("✅ Картинка сохранена!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 3000 звезд, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
 
 async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
@@ -577,6 +577,7 @@ def main():
     app_bot.add_handler(CommandHandler("stats", stats)) 
     app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
+    app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
