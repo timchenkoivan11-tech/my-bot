@@ -136,11 +136,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     business_id = getattr(msg, 'business_connection_id', None)
     if business_id:
         try:
-            # Узнаем, кому принадлежит этот бизнес-аккаунт
             conn = await context.bot.get_business_connection(business_id)
             owner_id = conn.user.id
             
-            # Если владелец настроил автоответчик и пишет не он сам
             if owner_id in auto_replies and user.id != owner_id:
                 await msg.reply_text(
                     auto_replies[owner_id], 
@@ -415,8 +413,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
     
-    # Доступ к кнопкам для всех (автоответчик), но игры только для админа/партнеров
-
     if query.data.startswith('time_'):
         if user_id != ADMIN_ID: return
         new_time = int(query.data.split('_')[1])
@@ -491,24 +487,30 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     msg = update.effective_message
     user_id = update.effective_user.id
     
-    if not msg or (user_id != ADMIN_ID and user_id not in PARTNER_IDS and user_id not in auto_replies) or update.effective_chat.type != 'private': return
+    if not msg or update.effective_chat.type != 'private': return
     step = context.user_data.get('setup_step')
     text = msg.text.strip()
 
+    # === АВТООТВЕТЧИК (ДОСТУПЕН ВСЕМ) ===
     if step == 'autoreply_setup':
         auto_replies[user_id] = text
         context.user_data['setup_step'] = None
+        
         if user_id == ADMIN_ID:
             rm = get_main_menu_keyboard()
         elif user_id in PARTNER_IDS:
             rm = get_partner_menu_keyboard()
         else:
             rm = get_public_menu_keyboard()
+            
         await msg.reply_text(f"✅ <b>Автоответчик сохранен!</b>\n\nТекст: {text}\n\nТеперь он будет отправляться всем, кто напишет вам в бизнес-чатах.", reply_markup=rm, parse_mode="HTML")
         return
+    # ======================================
+
+    # === ОСТАЛЬНЫЕ ФУНКЦИИ (ТОЛЬКО ДЛЯ АДМИНА И ПАРТНЕРОВ) ===
+    if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
 
     if step == 'set_chance':
-        if user_id != ADMIN_ID: return
         try:
             new_chance = float(text.replace(',', '.'))
             data["win_chance"] = new_chance; save_data(data)
@@ -517,7 +519,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError: await msg.reply_text("❌ Это не число.", reply_markup=get_back_keyboard())
         return
     if step == 'set_cooldown':
-        if user_id != ADMIN_ID: return
         try:
             new_cd = int(text)
             if new_cd < 0: raise ValueError
@@ -527,7 +528,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError: await msg.reply_text("❌ Нужно число минут.", reply_markup=get_back_keyboard())
         return
     if step == 'king_prize':
-        if user_id != ADMIN_ID: return
         current_prize = text; active_event = 'king'; current_king_id = None; current_king_name = None
         context.user_data['setup_step'] = None
         seconds = data.get("timer", DEFAULT_TIMER)
@@ -538,7 +538,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text("✅ Запущено!", reply_markup=get_main_menu_keyboard())
         return
     elif step == 'guess_number':
-        if user_id != ADMIN_ID: return
         if not text.isdigit(): return
         num = int(text)
         if num < 1 or num > context.user_data.get('guess_range', 1000): return
@@ -546,7 +545,6 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text("✅ Число принято!\n\n🎁 Напиши приз:", reply_markup=get_back_keyboard())
         return
     elif step == 'guess_prize':
-        if user_id != ADMIN_ID: return
         current_prize = text; active_event = 'guess'; context.user_data['setup_step'] = None
         end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить", callback_data='end_event')]])
         m = await context.bot.send_message(chat_id=CHAT_MAIN, text=f"🎯 <b>Ивент «Угадай число» начался!</b>\n\n🎁 Приз: <b>{current_prize}</b>", reply_markup=end_keyboard, parse_mode="HTML")
@@ -555,12 +553,10 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text(f"✅ Запущено! Загадано: {secret_number}", reply_markup=get_main_menu_keyboard())
         return
     elif step == 'lucky777_prize':
-        if user_id != ADMIN_ID: return
         context.user_data['lucky777_prize'] = text; context.user_data['setup_step'] = 'lucky777_price'
         await msg.reply_text("✅ Приз принят!\n\n💰 Напиши цену:", reply_markup=get_back_keyboard())
         return
     elif step == 'lucky777_price':
-        if user_id != ADMIN_ID: return
         lucky777_prize = context.user_data.get('lucky777_prize', 'Секретный приз'); active_event = 'lucky777'; context.user_data['setup_step'] = None
         end_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Завершить", callback_data='end_event')]])
         m = await context.bot.send_message(chat_id=CHAT_MAIN, text=f"🎰 <b>Лудка 777 запущена!</b>\n\n🎁 Приз: <b>{lucky777_prize}</b>\n⭐ Цена: {text}", reply_markup=end_keyboard, parse_mode="HTML")
@@ -569,14 +565,12 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text("✅ Запущено!", reply_markup=get_main_menu_keyboard())
         return
     elif step == 'prank_nft':
-        if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
         context.user_data['prank_nft_name'] = text
         context.user_data['prank_photo'] = text 
         context.user_data['setup_step'] = 'prank_price'
         await msg.reply_text("✅ Ссылка принята!\n\n💰 Шаг 2: Напиши точную сумму и валюту (например: 3000 звезд, 5 TON, 10 грамм):", reply_markup=get_back_keyboard())
         return
     elif step == 'prank_price':
-        if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
         price_input = text.lower()
         
         if "ton" in price_input or "тон" in price_input:
@@ -701,8 +695,7 @@ def main():
     app_bot.add_handler(MessageHandler(filters.Dice.ALL, on_dice))
     app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, admin_text_handler))
     app_bot.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, admin_photo_handler))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.ChatType.PRIVATE, on_message))
-    app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, on_message)) # Добавлено для ловли бизнес-сообщений
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message)) # Ловит бизнес-сообщения и сообщения из чатов
     app_bot.add_handler(InlineQueryHandler(inline_offer))
     print("Бот запущен...")
     app_bot.run_polling()
