@@ -136,36 +136,39 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg or not user or not chat: return
     
     # ==========================================
-    # АВТООТВЕТЧИК ДЛЯ БИЗНЕС-АККАУНТОВ (С ОТЛАДКОЙ)
+    # БИЗНЕС-АВТООТВЕТЧИК (С ОТЛАДКОЙ)
     # ==========================================
     business_id = getattr(msg, 'business_connection_id', None)
     if business_id:
         try:
             conn = await context.bot.get_business_connection(business_id)
             owner_id = conn.user.id
-            
             replies = data.get("auto_replies", {})
             
-            debug_text = (
-                f"🔍 <b>ДЕБАГ АВТООТВЕТА:</b>\n\n"
-                f"Кто написал: {user.first_name} (ID: {user.id})\n"
-                f"Владелец бота: {owner_id}\n"
-                f"Сохраненные ID в базе: {list(replies.keys())}\n"
+            await context.bot.send_message(
+                chat_id=ADMIN_ID, 
+                text=f"🔍 <b>Бот увидел сообщение в бизнес-чате!</b>\n\nОт: {user.first_name} (ID: {user.id})\nВладелец бота: {owner_id}\nСохраненные ключи: {list(replies.keys())}",
+                parse_mode="HTML"
             )
             
             if str(owner_id) in replies and user.id != owner_id:
-                await msg.reply_text(
-                    replies[str(owner_id)], 
+                reply_text = replies[str(owner_id)]
+                
+                await context.bot.send_message(
+                    chat_id=chat.id,
+                    text=reply_text,
                     business_connection_id=business_id
                 )
-                debug_text += "\n✅ <b>АВТООТВЕТ ОТПРАВЛЕН!</b>"
-            else:
-                debug_text += "\n❌ <b>Условия не совпали (нет ID в базе или написал сам владелец)</b>"
                 
-            await context.bot.send_message(ADMIN_ID, debug_text, parse_mode="HTML")
-            
+                await context.bot.send_message(ADMIN_ID, text="✅ АВТООТВЕТ УСПЕШНО ОТПРАВЛЕН!", parse_mode="HTML")
+                
+            elif user.id == owner_id:
+                await context.bot.send_message(ADMIN_ID, text="⚠️ Ты пишешь сам себе! Бот не отвечает владельцу, чтобы не спамить.", parse_mode="HTML")
+            else:
+                await context.bot.send_message(ADMIN_ID, text=f"❌ Ошибка: ID {owner_id} нет в базе автоответчиков. Ты точно сохранил текст?", parse_mode="HTML")
+                
         except Exception as e:
-            await context.bot.send_message(ADMIN_ID, f"❌ <b>ОШИБКА АВТООТВЕТА:</b>\n{e}", parse_mode="HTML")
+            await context.bot.send_message(ADMIN_ID, f"❌ ОШИБКА ОТПРАВКИ: {e}", parse_mode="HTML")
             logging.error(f"Ошибка автоответчика: {e}")
 
     # ==========================================
@@ -718,7 +721,7 @@ def main():
     app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
     app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
-    app_bot.add_handler(BusinessConnectionHandler(on_business_connection)) # Подписка на подключение
+    app_bot.add_handler(BusinessConnectionHandler(on_business_connection)) 
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_|autoreply_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
