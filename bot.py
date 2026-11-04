@@ -6,7 +6,7 @@ import asyncio
 import html
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember, InlineQueryResultPhoto
-from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler, InlineQueryHandler
+from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler, InlineQueryHandler, BusinessConnectionHandler
 from flask import Flask
 from threading import Thread
 
@@ -120,6 +120,11 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
         active_event = None 
     except asyncio.CancelledError: pass
     except Exception as e: logging.error(f"Ошибка: {e}")
+
+async def on_business_connection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = update.business_connection
+    if conn:
+        await context.bot.send_message(ADMIN_ID, f"🔗 <b>Бот подключен к бизнес-аккаунту!</b>\nВладелец ID: {conn.user.id}")
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
@@ -506,6 +511,11 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     
     if not msg or update.effective_chat.type != 'private': return
+    
+    # ВАЖНО: Если это сообщение из бизнес-чата, пропускаем его в on_message
+    if getattr(msg, 'business_connection_id', None):
+        return
+        
     step = context.user_data.get('setup_step')
     text = msg.text.strip()
 
@@ -708,6 +718,7 @@ def main():
     app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
     app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
+    app_bot.add_handler(BusinessConnectionHandler(on_business_connection)) # Подписка на подключение
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_|autoreply_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
