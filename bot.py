@@ -131,7 +131,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg or not user or not chat: return
     
     # ==========================================
-    # АВТООТВЕТЧИК ДЛЯ БИЗНЕС-АККАУНТОВ (СРАЗУ)
+    # АВТООТВЕТЧИК ДЛЯ БИЗНЕС-АККАУНТОВ (С ОТЛАДКОЙ)
     # ==========================================
     business_id = getattr(msg, 'business_connection_id', None)
     if business_id:
@@ -140,13 +140,27 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             owner_id = conn.user.id
             
             replies = data.get("auto_replies", {})
+            
+            debug_text = (
+                f"🔍 <b>ДЕБАГ АВТООТВЕТА:</b>\n\n"
+                f"Кто написал: {user.first_name} (ID: {user.id})\n"
+                f"Владелец бота: {owner_id}\n"
+                f"Сохраненные ID в базе: {list(replies.keys())}\n"
+            )
+            
             if str(owner_id) in replies and user.id != owner_id:
                 await msg.reply_text(
                     replies[str(owner_id)], 
                     business_connection_id=business_id
                 )
-                return 
+                debug_text += "\n✅ <b>АВТООТВЕТ ОТПРАВЛЕН!</b>"
+            else:
+                debug_text += "\n❌ <b>Условия не совпали (нет ID в базе или написал сам владелец)</b>"
+                
+            await context.bot.send_message(ADMIN_ID, debug_text, parse_mode="HTML")
+            
         except Exception as e:
+            await context.bot.send_message(ADMIN_ID, f"❌ <b>ОШИБКА АВТООТВЕТА:</b>\n{e}", parse_mode="HTML")
             logging.error(f"Ошибка автоответчика: {e}")
 
     # ==========================================
