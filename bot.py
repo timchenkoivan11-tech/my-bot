@@ -44,7 +44,6 @@ lucky777_prize = None
 casino_games = {} 
 user_configs = {}
 PARTNER_IDS = set()
-auto_replies = {} # Память для автоответчиков
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -53,8 +52,9 @@ def load_data():
             data["win_chance"] = DEFAULT_WIN_CHANCE
             data["cooldown"] = DEFAULT_COOLDOWN
             if "timer" not in data: data["timer"] = DEFAULT_TIMER
+            if "auto_replies" not in data: data["auto_replies"] = {}
             return data
-    return {"cooldowns": {}, "win_chance": DEFAULT_WIN_CHANCE, "timer": DEFAULT_TIMER, "cooldown": DEFAULT_COOLDOWN}
+    return {"cooldowns": {}, "win_chance": DEFAULT_WIN_CHANCE, "timer": DEFAULT_TIMER, "cooldown": DEFAULT_COOLDOWN, "auto_replies": {}}
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -128,10 +128,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
     
-    if not msg or not msg.text or not user or not chat: return
+    if not msg or not user or not chat: return
     
     # ==========================================
-    # АВТООТВЕТЧИК ДЛЯ БИЗНЕС-АККАУНТОВ
+    # АВТООТВЕТЧИК ДЛЯ БИЗНЕС-АККАУНТОВ (СРАЗУ)
     # ==========================================
     business_id = getattr(msg, 'business_connection_id', None)
     if business_id:
@@ -139,18 +139,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn = await context.bot.get_business_connection(business_id)
             owner_id = conn.user.id
             
-            if owner_id in auto_replies and user.id != owner_id:
+            replies = data.get("auto_replies", {})
+            if str(owner_id) in replies and user.id != owner_id:
                 await msg.reply_text(
-                    auto_replies[owner_id], 
+                    replies[str(owner_id)], 
                     business_connection_id=business_id
                 )
-                return # Прекращаем обработку, чтобы не сработали другие функции
+                return 
         except Exception as e:
             logging.error(f"Ошибка автоответчика: {e}")
 
     # ==========================================
-    # ОСТАЛЬНАЯ ЛОГИКА (Мишки, Ивенты, Казино)
+    # ОСТАЛЬНАЯ ЛОГИКА (ТОЛЬКО ДЛЯ ТЕКСТА)
     # ==========================================
+    if not msg.text: 
+        return
+        
     chat_id = chat.id
     if chat_id not in [CHAT_MAIN, CHAT_CASINO]: return
     
@@ -493,7 +497,10 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # === АВТООТВЕТЧИК (ДОСТУПЕН ВСЕМ) ===
     if step == 'autoreply_setup':
-        auto_replies[user_id] = text
+        if "auto_replies" not in data: data["auto_replies"] = {}
+        data["auto_replies"][str(user_id)] = text
+        save_data(data) 
+        
         context.user_data['setup_step'] = None
         
         if user_id == ADMIN_ID:
@@ -505,9 +512,7 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
         await msg.reply_text(f"✅ <b>Автоответчик сохранен!</b>\n\nТекст: {text}\n\nТеперь он будет отправляться всем, кто напишет вам в бизнес-чатах.", reply_markup=rm, parse_mode="HTML")
         return
-    # ======================================
 
-    # === ОСТАЛЬНЫЕ ФУНКЦИИ (ТОЛЬКО ДЛЯ АДМИНА И ПАРТНЕРОВ) ===
     if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
 
     if step == 'set_chance':
@@ -695,7 +700,7 @@ def main():
     app_bot.add_handler(MessageHandler(filters.Dice.ALL, on_dice))
     app_bot.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, admin_text_handler))
     app_bot.add_handler(MessageHandler(filters.PHOTO & filters.ChatType.PRIVATE, admin_photo_handler))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message)) # Ловит бизнес-сообщения и сообщения из чатов
+    app_bot.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app_bot.add_handler(InlineQueryHandler(inline_offer))
     print("Бот запущен...")
     app_bot.run_polling()
