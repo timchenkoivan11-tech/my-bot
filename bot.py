@@ -43,8 +43,6 @@ guess_range = None
 lucky777_prize = None
 casino_games = {} 
 user_configs = {}
-PARTNER_IDS = set()
-business_connections = {} # Запоминаем ID бизнес-аккаунтов здесь
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -54,14 +52,17 @@ def load_data():
             data["cooldown"] = DEFAULT_COOLDOWN
             if "timer" not in data: data["timer"] = DEFAULT_TIMER
             if "auto_replies" not in data: data["auto_replies"] = {}
+            if "partners" not in data: data["partners"] = []
+            if "businesses" not in data: data["businesses"] = {}
             return data
-    return {"cooldowns": {}, "win_chance": DEFAULT_WIN_CHANCE, "timer": DEFAULT_TIMER, "cooldown": DEFAULT_COOLDOWN, "auto_replies": {}}
+    return {"cooldowns": {}, "win_chance": DEFAULT_WIN_CHANCE, "timer": DEFAULT_TIMER, "cooldown": DEFAULT_COOLDOWN, "auto_replies": {}, "partners": [], "businesses": {}}
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 data = load_data()
+PARTNER_IDS = set(data.get("partners", []))
 
 def get_main_menu_keyboard():
     keyboard = [
@@ -70,6 +71,8 @@ def get_main_menu_keyboard():
         [InlineKeyboardButton("🎰 Запустить Лудку 777", callback_data='setup_lucky777')],
         [InlineKeyboardButton("🤡 Создать пранк-оффер", callback_data='prank_setup')],
         [InlineKeyboardButton("🤖 Настроить автоответчик", callback_data='autoreply_setup')],
+        [InlineKeyboardButton("📢 Сделать рассылку", callback_data='broadcast_start')],
+        [InlineKeyboardButton("👥 Список партнеров", callback_data='manage_partners')],
         [InlineKeyboardButton("⏱ 30 сек", callback_data='time_30'), InlineKeyboardButton("⏱ 1 мин", callback_data='time_60')],
         [InlineKeyboardButton("⏱ 3 мин", callback_data='time_180'), InlineKeyboardButton("⏱ 5 мин", callback_data='time_300')],
         [InlineKeyboardButton("🎲 Шанс мишки", callback_data='change_chance')],
@@ -81,7 +84,8 @@ def get_main_menu_keyboard():
 def get_partner_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("🤡 Создать пранк-оффер", callback_data='prank_setup')],
-        [InlineKeyboardButton("🤖 Настроить автоответчик", callback_data='autoreply_setup')]
+        [InlineKeyboardButton("🤖 Настроить автоответчик", callback_data='autoreply_setup')],
+        [InlineKeyboardButton("📢 Сделать рассылку", callback_data='broadcast_start')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -122,10 +126,41 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
     except asyncio.CancelledError: pass
     except Exception as e: logging.error(f"Ошибка: {e}")
 
+# --- ФОНОВАЯ РАССЫЛКА (ОТ ЛИЦА БИЗНЕС-АККАУНТА) ---
+async def process_broadcast(user_id, targets, message, delay, context):
+    success = 0
+    failed = 0
+    biz_id = data.get("businesses", {}).get(str(user_id))
+    
+    if not biz_id:
+        await context.bot.send_message(user_id, "⚠️ <b>Внимание!</b> Бот не подключен к вашему бизнес-аккаунту. Сообщения будут отправлены от имени бота.\n\nЧтобы слать от своего имени, подключите бота в настройках Telegram Business -> Чат-боты.", parse_mode="HTML")
+        
+    await context.bot.send_message(user_id, f"🚀 <b>Рассылка запущена!</b>\nЦелей: {len(targets)}\nЗадержка: {delay} сек.", parse_mode="HTML")
+    
+    for target in targets:
+        try:
+            if biz_id:
+                await context.bot.send_message(chat_id=target, text=message, business_connection_id=biz_id)
+            else:
+                await context.bot.send_message(chat_id=target, text=message)
+            success += 1
+        except Exception as e:
+            failed += 1
+            logging.error(f"Ошибка рассылки для {target}: {e}")
+        await asyncio.sleep(delay)
+        
+    await context.bot.send_message(
+        user_id, 
+        f"✅ <b>Рассылка завершена!</b>\n\nУспешно доставлено: {success}\nНе доставлено: {failed}\n\n<i>(Сообщения не доставляются тем, кто не писал вам ни разу)</i>",
+        parse_mode="HTML"
+    )
+
 async def on_business_connection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = update.business_connection
     if conn:
-        business_connections[conn.id] = conn.user.id
+        if "businesses" not in data: data["businesses"] = {}
+        data["businesses"][str(conn.user.id)] = conn.id
+        save_data(data)
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
@@ -136,39 +171,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not msg or not user or not chat: return
     
-    # ==========================================
-    # АВТООТВЕТЧИК (Мгновенный, без спама в личку)
-    # ==========================================
     business_id = getattr(msg, 'business_connection_id', None)
     if business_id:
-        owner_id = business_connections.get(business_id)
-        
-        # Если бот перезагрузился и потерял ID, запрашиваем один раз
-        if not owner_id:
-            try:
-                conn = await context.bot.get_business_connection(business_id)
-                owner_id = conn.user.id
-                business_connections[business_id] = owner_id
-            except Exception:
-                pass
-        
-        if owner_id:
+        try:
+            conn = await context.bot.get_business_connection(business_id)
+            owner_id = conn.user.id
+            if "businesses" not in data: data["businesses"] = {}
+            if str(owner_id) not in data["businesses"]:
+                data["businesses"][str(owner_id)] = business_id
+                save_data(data)
+                
             replies = data.get("auto_replies", {})
-            # Отвечаем ВСЕМ, кроме самого владельца аккаунта
             if str(owner_id) in replies and user.id != owner_id:
-                try:
-                    await context.bot.send_message(
-                        chat_id=chat.id,
-                        text=replies[str(owner_id)],
-                        business_connection_id=business_id
-                    )
-                except Exception as e:
-                    logging.error(f"Ошибка автоответа: {e}")
-        return # Прекращаем обработку, чтобы не лезть в игры
+                await context.bot.send_message(chat_id=chat.id, text=replies[str(owner_id)], business_connection_id=business_id)
+        except Exception: pass
+        return 
 
-    # ==========================================
-    # ИГРЫ (ТОЛЬКО ТЕКСТ)
-    # ==========================================
     if not msg.text: return
         
     chat_id = chat.id
@@ -416,8 +434,11 @@ async def cmd_add_partner(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         pid = int(context.args[0])
+        if pid not in data["partners"]:
+            data["partners"].append(pid)
+            save_data(data)
         PARTNER_IDS.add(pid)
-        await update.message.reply_text(f"✅ Пользователь {pid} теперь может создавать офферы.")
+        await update.message.reply_text(f"✅ Пользователь {pid} теперь может создавать офферы и делать рассылки.")
     except ValueError:
         await update.message.reply_text("❌ ID должен быть числом.")
 
@@ -458,6 +479,45 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'autoreply_setup':
         context.user_data['setup_step'] = 'autoreply_setup'
         await query.edit_message_text("🤖 <b>Настройка автоответчика</b>\n\nНапиши текст:", parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif query.data == 'broadcast_start':
+        if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
+        context.user_data['setup_step'] = 'broadcast_targets'
+        await query.edit_message_text("📢 <b>Настройка рассылки</b>\n\nОтправь список юзернеймов или ID (через пробел или запятую).\n\n<i>Пример: @user1, @user2, 123456789</i>", parse_mode="HTML", reply_markup=get_back_keyboard())
+    elif query.data == 'manage_partners':
+        if user_id != ADMIN_ID: return
+        partners = data.get("partners", [])
+        if not partners:
+            text = "👥 <b>Список партнеров пуст.</b>"
+            kb = get_back_keyboard()
+        else:
+            text = "👥 <b>Управление партнерами</b>\n\nНажми на партнера, чтобы удалить его:"
+            buttons = []
+            for p in partners:
+                buttons.append([InlineKeyboardButton(f"❌ Удалить {p}", callback_data=f"kick_{p}")])
+            buttons.append([InlineKeyboardButton("🔙 Назад", callback_data='back_to_menu')])
+            kb = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(text=text, reply_markup=kb, parse_mode="HTML")
+    elif query.data.startswith('kick_'):
+        if user_id != ADMIN_ID: return
+        pid = int(query.data.split('_')[1])
+        if pid in data.get("partners", []):
+            data["partners"].remove(pid)
+            save_data(data)
+        if pid in PARTNER_IDS:
+            PARTNER_IDS.remove(pid)
+        
+        partners = data.get("partners", [])
+        if not partners:
+            text = "👥 <b>Список партнеров пуст.</b>"
+            kb = get_back_keyboard()
+        else:
+            text = "👥 <b>Управление партнерами</b>\n\nНажми на партнера, чтобы удалить его:"
+            buttons = []
+            for p in partners:
+                buttons.append([InlineKeyboardButton(f"❌ Удалить {p}", callback_data=f"kick_{p}")])
+            buttons.append([InlineKeyboardButton("🔙 Назад", callback_data='back_to_menu')])
+            kb = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(text=text, reply_markup=kb, parse_mode="HTML")
     elif query.data in ['range_100', 'range_1000']:
         if user_id != ADMIN_ID: return
         context.user_data['guess_range'] = 100 if query.data == 'range_100' else 1000
@@ -522,6 +582,37 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
+
+    # === ЛОГИКА РАССЫЛКИ ===
+    if step == 'broadcast_targets':
+        targets = [t.strip() for t in text.replace(',', ' ').split() if t.strip()]
+        context.user_data['b_targets'] = targets
+        context.user_data['setup_step'] = 'broadcast_message'
+        await msg.reply_text(f"✅ Принято {len(targets)} целей.\n\n📝 <b>Шаг 2:</b> Напиши текст сообщения для рассылки:", parse_mode="HTML", reply_markup=get_back_keyboard())
+        return
+        
+    if step == 'broadcast_message':
+        context.user_data['b_message'] = text
+        context.user_data['setup_step'] = 'broadcast_delay'
+        await msg.reply_text("⏱ <b>Шаг 3:</b> Напиши задержку между сообщениями в секундах (например: 2):", reply_markup=get_back_keyboard())
+        return
+
+    if step == 'broadcast_delay':
+        try:
+            delay = int(text)
+            if delay < 0: raise ValueError
+        except ValueError:
+            await msg.reply_text("❌ Введи целое число секунд.", reply_markup=get_back_keyboard())
+            return
+            
+        targets = context.user_data.get('b_targets', [])
+        message = context.user_data.get('b_message', '')
+        context.user_data['setup_step'] = None
+        
+        asyncio.create_task(process_broadcast(user_id, targets, message, delay, context))
+        await msg.reply_text("✅ Рассылка запущена!", reply_markup=get_partner_menu_keyboard() if user_id != ADMIN_ID else get_main_menu_keyboard())
+        return
+    # ========================
 
     if step == 'set_chance':
         try:
@@ -697,7 +788,7 @@ def main():
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
     app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
     app_bot.add_handler(BusinessConnectionHandler(on_business_connection))
-    app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_|autoreply_)"))
+    app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_|autoreply_|broadcast_|manage_partners|kick_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
     app_bot.add_handler(MessageHandler(filters.Dice.ALL, on_dice))
