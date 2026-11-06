@@ -146,7 +146,7 @@ async def process_broadcast(user_id, targets, message, delay, context):
         except Exception as e:
             failed += 1
             logging.error(f"Ошибка рассылки для {target}: {e}")
-        await asyncio.sleep(delay)
+        await asyncio.sleep(delay)  # КД МЕЖДУ ПОЛЬЗОВАТЕЛЯМИ
         
     await context.bot.send_message(
         user_id, 
@@ -481,7 +481,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'broadcast_start':
         if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
         context.user_data['setup_step'] = 'broadcast_targets'
-        await query.edit_message_text("📢 <b>Настройка рассылки</b>\n\nОтправь список юзернеймов или ID (через пробел или запятую).\n\n<i>Пример: @user1, @user2, 123456789</i>", parse_mode="HTML", reply_markup=get_back_keyboard())
+        await query.edit_message_text("📢 <b>Настройка рассылки</b>\n\nОтправь список юзернеймов или ID (каждый с новой строки).\n\n<i>Пример:\n@user1\n@user2\n123456789</i>", parse_mode="HTML", reply_markup=get_back_keyboard())
     elif query.data == 'manage_partners':
         if user_id != ADMIN_ID: return
         partners = data.get("partners", [])
@@ -554,6 +554,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await query.edit_message_caption(caption="❌ Вы отклонили предложение.", parse_mode="HTML")
         except Exception: pass
+    # === НОВАЯ ОБРАБОТКА КНОПОК КД РАССЫЛКИ ===
+    elif query.data.startswith('bcast_delay_'):
+        if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
+        delay = int(query.data.split('_')[-1])
+        targets = context.user_data.get('b_targets', [])
+        message = context.user_data.get('b_message', '')
+        
+        await query.message.edit_text(f"✅ Задержка (КД): <b>{delay} сек.</b>\n🚀 Рассылка запускается...", parse_mode="HTML")
+        asyncio.create_task(process_broadcast(user_id, targets, message, delay, context))
 
 async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_event, secret_number, current_prize, current_king_id, current_king_name, lucky777_prize
@@ -583,7 +592,7 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_id != ADMIN_ID and user_id not in PARTNER_IDS: return
 
     if step == 'broadcast_targets':
-        targets = [t.strip() for t in text.replace(',', ' ').split() if t.strip()]
+        targets = [t.strip() for t in text.replace(',', '\n').split('\n') if t.strip()]
         context.user_data['b_targets'] = targets
         context.user_data['setup_step'] = 'broadcast_message'
         await msg.reply_text(f"✅ Принято {len(targets)} целей.\n\n📝 <b>Шаг 2:</b> Напиши текст сообщения для рассылки:", parse_mode="HTML", reply_markup=get_back_keyboard())
@@ -591,24 +600,23 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
     if step == 'broadcast_message':
         context.user_data['b_message'] = text
-        context.user_data['setup_step'] = 'broadcast_delay'
-        await msg.reply_text("⏱ <b>Шаг 3:</b> Напиши задержку между сообщениями в секундах (например: 2):", reply_markup=get_back_keyboard())
-        return
-
-    if step == 'broadcast_delay':
-        try:
-            delay = int(text)
-            if delay < 0: raise ValueError
-        except ValueError:
-            await msg.reply_text("❌ Введи целое число секунд.", reply_markup=get_back_keyboard())
-            return
-            
-        targets = context.user_data.get('b_targets', [])
-        message = context.user_data.get('b_message', '')
-        context.user_data['setup_step'] = None
         
-        asyncio.create_task(process_broadcast(user_id, targets, message, delay, context))
-        await msg.reply_text("✅ Рассылка запущена!", reply_markup=get_partner_menu_keyboard() if user_id != ADMIN_ID else get_main_menu_keyboard())
+        # === НОВЫЙ ШАГ: ВЫБОР КД КНОПКАМИ ===
+        delay_keyboard = [
+            [InlineKeyboardButton("⚡ 1 сек", callback_data='bcast_delay_1'),
+             InlineKeyboardButton("⏱ 3 сек", callback_data='bcast_delay_3'),
+             InlineKeyboardButton("⏱ 5 сек", callback_data='bcast_delay_5')],
+            [InlineKeyboardButton("⏱ 10 сек", callback_data='bcast_delay_10'),
+             InlineKeyboardButton("⏱ 30 сек", callback_data='bcast_delay_30'),
+             InlineKeyboardButton("🛡 60 сек", callback_data='bcast_delay_60')],
+            [InlineKeyboardButton("🔙 Отмена", callback_data='back_to_menu')]
+        ]
+        context.user_data['setup_step'] = None
+        await msg.reply_text(
+            "⏱ <b>Шаг 3:</b> Выбери задержку (КД) между сообщениями, чтобы не словить бан:", 
+            reply_markup=InlineKeyboardMarkup(delay_keyboard), 
+            parse_mode="HTML"
+        )
         return
 
     if step == 'set_chance':
@@ -785,7 +793,8 @@ def main():
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
     app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
     app_bot.add_handler(BusinessConnectionHandler(on_business_connection))
-    app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_|autoreply_|broadcast_|manage_partners|kick_)"))
+    # Обновил регулярку, чтобы ловить bcast_delay_
+    app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_|autoreply_|broadcast_|bcast_delay_|manage_partners|kick_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
     app_bot.add_handler(MessageHandler(filters.Dice.ALL, on_dice))
@@ -795,7 +804,6 @@ def main():
     app_bot.add_handler(InlineQueryHandler(inline_offer))
     print("Бот запущен...")
     
-    # === ФИКС ТУТ ===
     app_bot.run_polling(
         allowed_updates=[
             Update.MESSAGE,
