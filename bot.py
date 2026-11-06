@@ -794,7 +794,20 @@ def main():
     app_bot.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, on_message))
     app_bot.add_handler(InlineQueryHandler(inline_offer))
     print("Бот запущен...")
-    app_bot.run_polling()
+    
+    # === ФИКС ТУТ ===
+    app_bot.run_polling(
+        allowed_updates=[
+            Update.MESSAGE,
+            Update.EDITED_MESSAGE,
+            Update.CALLBACK_QUERY,
+            Update.INLINE_QUERY,
+            Update.BUSINESS_CONNECTION,
+            Update.BUSINESS_MESSAGE,
+            Update.EDITED_BUSINESS_MESSAGE,
+            Update.DELETED_BUSINESS_MESSAGES,
+        ]
+    )
 
 if __name__ == "__main__":
     main()
