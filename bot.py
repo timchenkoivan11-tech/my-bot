@@ -6,7 +6,7 @@ import asyncio
 import html
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember, InlineQueryResultPhoto
-from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler, InlineQueryHandler
+from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler, InlineQueryHandler, BusinessConnectionHandler
 from flask import Flask
 from threading import Thread
 
@@ -44,6 +44,7 @@ lucky777_prize = None
 casino_games = {} 
 user_configs = {}
 PARTNER_IDS = set()
+business_connections = {} # Запоминаем ID бизнес-аккаунтов здесь
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -121,6 +122,11 @@ async def run_timer(chat_id, user_id, user_name, seconds, prize, context):
     except asyncio.CancelledError: pass
     except Exception as e: logging.error(f"Ошибка: {e}")
 
+async def on_business_connection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = update.business_connection
+    if conn:
+        business_connections[conn.id] = conn.user.id
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_timer_task, current_king_id, current_king_name, active_event, secret_number, current_prize
     
@@ -131,25 +137,34 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg or not user or not chat: return
     
     # ==========================================
-    # БИЗНЕС-АВТООТВЕТЧИК (ЛОВИТ ВСЁ)
+    # АВТООТВЕТЧИК (Мгновенный, без спама в личку)
     # ==========================================
     business_id = getattr(msg, 'business_connection_id', None)
     if business_id:
-        try:
-            conn = await context.bot.get_business_connection(business_id)
-            owner_id = conn.user.id
+        owner_id = business_connections.get(business_id)
+        
+        # Если бот перезагрузился и потерял ID, запрашиваем один раз
+        if not owner_id:
+            try:
+                conn = await context.bot.get_business_connection(business_id)
+                owner_id = conn.user.id
+                business_connections[business_id] = owner_id
+            except Exception:
+                pass
+        
+        if owner_id:
             replies = data.get("auto_replies", {})
-            
-            await context.bot.send_message(ADMIN_ID, f"🔍 Бот видит бизнес-сообщение!\nОт: {user.first_name}\nВладелец: {owner_id}\nБаза: {list(replies.keys())}")
-            
+            # Отвечаем ВСЕМ, кроме самого владельца аккаунта
             if str(owner_id) in replies and user.id != owner_id:
-                await context.bot.send_message(
-                    chat_id=chat.id,
-                    text=replies[str(owner_id)],
-                    business_connection_id=business_id
-                )
-        except Exception as e:
-            logging.error(f"Ошибка автоответчика: {e}")
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat.id,
+                        text=replies[str(owner_id)],
+                        business_connection_id=business_id
+                    )
+                except Exception as e:
+                    logging.error(f"Ошибка автоответа: {e}")
+        return # Прекращаем обработку, чтобы не лезть в игры
 
     # ==========================================
     # ИГРЫ (ТОЛЬКО ТЕКСТ)
@@ -681,6 +696,7 @@ def main():
     app_bot.add_handler(CommandHandler("price", announce_price))
     app_bot.add_handler(CommandHandler("send_offer", cmd_send_offer))
     app_bot.add_handler(CommandHandler("offer", cmd_send_offer))
+    app_bot.add_handler(BusinessConnectionHandler(on_business_connection))
     app_bot.add_handler(CallbackQueryHandler(button_handler, pattern="^(time_|setup_|range_|end_event|change_|show_commands|back_to_menu|prank_|autoreply_)"))
     app_bot.add_handler(CallbackQueryHandler(casino_button_handler, pattern="^casino_click_"))
     app_bot.add_handler(CallbackQueryHandler(ignore_handler, pattern="^ignore$"))
