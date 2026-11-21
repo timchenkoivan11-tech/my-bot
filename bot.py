@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery
 
 # --- НАСТРОЙКИ ---
 BOT_TOKEN = "9180887429:AAH4-Lny3omAwAklfnfwBSq12KfPIyQIV74"
-ADMIN_ID = 123456789  # ВАШ Telegram ID (узнать можно у @userinfobot)
+ADMIN_ID =  5522110735 # ВАШ Telegram ID (узнать можно у @userinfobot)
 
 # Хранилище активных игр
 active_games = {}
