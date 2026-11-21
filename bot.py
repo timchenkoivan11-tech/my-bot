@@ -1,14 +1,14 @@
 import asyncio
 import random
 import logging
-from aiogram import Bot, Dispatcher, F, types
+from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import Message, CallbackQuery
 
 # --- НАСТРОЙКИ ---
-BOT_TOKEN = "9180887429:AAH4-Lny3omAwAklfnfwBSq12KfPIyQIV74"
-ADMIN_ID =  5522110735 # ВАШ Telegram ID (узнать можно у @userinfobot)
+BOT_TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
+ADMIN_ID = 123456789  # ВАШ ID (узнать у @userinfobot)
 
 # Хранилище активных игр
 active_games = {}
@@ -45,46 +45,52 @@ async def notify_admin(winner_name: str, prize: str, chat_title: str):
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление админу: {e}")
 
-# --- ОБРАБОТЧИКИ ---
-@dp.message(Command("slot"))
-async def cmd_slot(message: Message):
-    dice_msg = await message.answer_dice(emoji="🎰")
-    await asyncio.sleep(3)
+# --- ОБРАБОТЧИК ЭМОДЗИ СЛОТОВ ---
+# Реагируем на сообщение, если в нем есть эмодзи 🎰
+@dp.message(F.text.contains("🎰"))
+async def handle_slot_emoji(message: Message):
+    # Игнорируем команды бота, если они содержат этот эмодзи
+    if message.text.startswith("/"):
+        return
 
-    dice_value = dice_msg.dice.value
-    
-    # 64 - это джекпот (777). Остальные - обычный шанс 20%
-    is_jackpot = (dice_value == 64)
-    is_win = is_jackpot or (random.random() < 0.2)
+    # Имитируем "прокрутку" перед результатом
+    await asyncio.sleep(1.5)
 
-    if is_jackpot:
-        game_id = f"{message.from_user.id}_{dice_msg.message_id}"
-        # В джекпоте 25 ячеек, гарантированно есть мишка и другие призы
-        rewards = ["bear", "ring", "cake", "none"] * 6 + ["bear"]
+    # Шансы: 5% на джекпот (25 ячеек), 25% на обычный выигрыш (3 ячейки)
+    # Остальные 70% - проигрыш
+    roll = random.random()
+
+    if roll < 0.05:
+        # ДЖЕКПОТ
+        game_id = f"{message.from_user.id}_{message.message_id}"
+        # В 25 ячейках: 3 мишки, 3 кольца, 4 тортика, остальное пусто
+        rewards = ["bear"] * 3 + ["ring"] * 3 + ["cake"] * 4 + ["none"] * 15
         random.shuffle(rewards)
         active_games[game_id] = rewards
         
-        await message.answer(
+        await message.reply(
             "🎉 **ДЖЕКПОТ 777!** 🎉\n\n"
-            "Перед тобой 25 ячеек. В одной из них точно спрятан мишка 🐻!\n"
+            "Перед тобой 25 ячеек. Внутри спрятаны ценные призы!\n"
             "Выбирай!",
             reply_markup=get_guess_keyboard(game_id, count=25)
         )
-    elif is_win:
-        game_id = f"{message.from_user.id}_{dice_msg.message_id}"
+    elif roll < 0.30:
+        # ОБЫЧНЫЙ ВЫИГРЫШ
+        game_id = f"{message.from_user.id}_{message.message_id}"
         bear_index = random.randint(0, 2)
         rewards = ["none", "none", "none"]
         rewards[bear_index] = "bear"
         active_games[game_id] = rewards
         
-        await message.answer(
+        await message.reply(
             "✨ Ты поймал три в ряд!\n\n"
             "Перед тобой 3 ячейки — в одной из них мишка 🐻. Выбирай!",
             reply_markup=get_guess_keyboard(game_id, count=3)
         )
     else:
-        await message.answer("😔 Не повезло... Повезёт в следующий раз!")
+        await message.reply("😔 Не повезло... Повезёт в следующий раз!")
 
+# --- ОБРАБОТЧИК ВЫБОРА ЯЧЕЙКИ ---
 @dp.callback_query(F.data.startswith("guess_"))
 async def process_guess(callback: CallbackQuery):
     data = callback.data.split("_")
@@ -102,10 +108,9 @@ async def process_guess(callback: CallbackQuery):
 
     reward = rewards[chosen_index]
     
-    # Удаляем игру после выбора
+    # Удаляем игру
     del active_games[game_id]
 
-    # Определяем название приза для уведомления
     prize_name = "Ничего (пусто)"
     if reward == "bear": prize_name = "Мишка 🐻"
     elif reward == "ring": prize_name = "Кольцо 💍"
@@ -115,13 +120,12 @@ async def process_guess(callback: CallbackQuery):
     chat_title = callback.message.chat.title or "Личные сообщения"
 
     if reward != "none":
-        # Сообщение в чат
         await callback.message.edit_text(
             f"🎉 Поздравляем, {user_name}! Ты выиграл: **{prize_name}**!\n"
             f"(Администратор уведомлен)",
             reply_markup=None
         )
-        # Уведомление вам в личку
+        # Отчет вам в личку
         await notify_admin(user_name, prize_name, chat_title)
     else:
         await callback.message.edit_text(
